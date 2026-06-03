@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en" data-theme="zinc-dark">
+<head>
+  <meta charset="utf-8">
+  <title>chords — guitar tabs that follow you</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <link rel="icon" type="image/svg+xml" href="assets/svg/chords-icon-dark.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/png/chords-icon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/png/chords-icon-16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/png/chords-icon-180.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#1c1917">
+  <link rel="stylesheet" href="colors_and_type.css?v=56">
+  <link rel="stylesheet" href="app.css?v=56">
+
+  <!-- React vendored locally (was unpkg CDN) so the native Tauri app needs no network for its shell. -->
+  <script src="vendor/react.development.js?v=56"></script>
+  <script src="vendor/react-dom.development.js?v=56"></script>
+
+  <script src="api.js?v=56"></script>
+  <script src="data.js?v=56"></script>
+</head>
+<body>
+  <div id="app"></div>
+
+  <!-- Precompiled from the matching .jsx by server/scripts/build-frontend.js — no
+       in-browser Babel. The packaged Tauri app serves these over a custom protocol
+       whose CSP carries a nonce, which makes the browser ignore 'unsafe-inline' and
+       would block Babel's runtime-injected scripts (blank window). Run the build
+       script (or `--watch`) after editing any .jsx. -->
+  <script src="icons.js?v=56"></script>
+  <script src="ui.js?v=56"></script>
+  <script src="tweaks-panel.js?v=56"></script>
+  <script src="song-view.js?v=56"></script>
+  <script src="screens.js?v=56"></script>
+  <script src="app.js?v=56"></script>
+</body>
+</html>

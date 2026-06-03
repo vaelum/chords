@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Chords Importer",
+  "version": "0.1.0",
+  "description": "Scrape the current page in your own browser (past bot checks/captchas) and import it into Chords.",
+  "permissions": ["activeTab", "scripting", "storage", "tabs"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Import this page into Chords"
+  },
+  "icons": {
+    "16": "assets/chords-icon-16.png",
+    "32": "assets/chords-icon-32.png",
+    "64": "assets/chords-icon-64.png",
+    "128": "assets/chords-icon-128.png"
+  },
+  "options_page": "options.html"
+}

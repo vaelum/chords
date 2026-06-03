@@ -1,0 +1,15 @@
+services:
+  chords:
+    container_name: chords
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    volumes:
+      - ${HOME}/.chords:/chords-data
+      - ../backend:/app/backend
+      - ../frontend:/app/frontend
+      # Forward the host's Claude Code login so the agent SDK can authenticate.
+      - ${HOME}/.claude:/home/chords/.claude
+      - ${HOME}/.claude.json:/home/chords/.claude.json
+
+  # No Caddy in dev — hit port 8000 directly.

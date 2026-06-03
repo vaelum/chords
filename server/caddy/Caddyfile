@@ -1,0 +1,3 @@
+{$CHORDS_DOMAIN} {
+    reverse_proxy chords:8000
+}

@@ -1,0 +1,320 @@
+/* =========================================================================
+   shadcn_ui Flutter — Design Tokens (Colors & Typography)
+   Ported 1:1 from lib/src/theme/color_scheme/*.dart and text_styles_default.dart
+   Source: https://github.com/nank1ro/flutter-shadcn-ui
+   ========================================================================= */
+
+/* ---------- Variable web fonts (TTF Variable; weight axis 100–900) -------- */
+@font-face {
+  font-family: "Geist";
+  src: url("./fonts/Geist-Variable.ttf") format("truetype-variations"),
+       url("./fonts/Geist-Variable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("./fonts/GeistMono-Variable.ttf") format("truetype-variations"),
+       url("./fonts/GeistMono-Variable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ============================================================
+   Base palette tokens — DEFAULT = Zinc light (project default
+   matches the SKILL.md counter example).  Override at :root or
+   on any subtree by including one of the [data-theme] blocks.
+   ============================================================ */
+
+:root,
+[data-theme="zinc-light"] {
+  /* surfaces */
+  --background: #ffffff;
+  --foreground: #09090b;
+  --card: #ffffff;
+  --card-foreground: #09090b;
+  --popover: #ffffff;
+  --popover-foreground: #09090b;
+  /* brand / interactive */
+  --primary: #18181b;
+  --primary-foreground: #fafafa;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #18181b;
+  --muted: #f4f4f5;
+  --muted-foreground: #71717a;
+  --accent: #f4f4f5;
+  --accent-foreground: #18181b;
+  /* semantic */
+  --destructive: #ef4444;
+  --destructive-foreground: #fafafa;
+  /* chrome */
+  --border: #e4e4e7;
+  --input: #e4e4e7;
+  --ring: #18181b;
+  --selection: #b4d7ff;
+
+  /* radius — shadcn-ui standard (px in Flutter, BorderRadius.circular(8)) */
+  --radius-sm: 6px;
+  --radius: 8px;       /* default for cards / inputs */
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* shadows — exact port from themes/shadows.dart */
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / .05);
+  --shadow:    0 1px 3px rgb(0 0 0 / .10), 0 1px 2px -1px rgb(0 0 0 / .10);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / .10), 0 2px 4px -2px rgb(0 0 0 / .10);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / .10), 0 4px 6px -4px rgb(0 0 0 / .10);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / .10), 0 8px 10px -6px rgb(0 0 0 / .10);
+  --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / .25);
+  --shadow-inner: inset 0 2px 4px rgb(0 0 0 / .05);
+
+  /* fonts */
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+               Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+               Consolas, "Liberation Mono", monospace;
+}
+
+[data-theme="zinc-dark"] {
+  --background: #09090b;
+  --foreground: #fafafa;
+  --card: #09090b;
+  --card-foreground: #fafafa;
+  --popover: #09090b;
+  --popover-foreground: #fafafa;
+  --primary: #fafafa;
+  --primary-foreground: #18181b;
+  --secondary: #27272a;
+  --secondary-foreground: #fafafa;
+  --muted: #27272a;
+  --muted-foreground: #a1a1aa;
+  --accent: #27272a;
+  --accent-foreground: #fafafa;
+  --destructive: #ef4444;
+  --destructive-foreground: #fafafa;
+  --border: #27272a;
+  --input: #27272a;
+  --ring: #d4d4d8;
+  --selection: #355172;
+}
+
+[data-theme="slate-light"] {
+  --background: #ffffff; --foreground: #020817;
+  --card: #ffffff; --card-foreground: #020817;
+  --popover: #ffffff; --popover-foreground: #020817;
+  --primary: #0f172a; --primary-foreground: #f8fafc;
+  --secondary: #f1f5f9; --secondary-foreground: #0f172a;
+  --muted: #f1f5f9; --muted-foreground: #64748b;
+  --accent: #f1f5f9; --accent-foreground: #0f172a;
+  --destructive: #ef4444; --destructive-foreground: #f8fafc;
+  --border: #e2e8f0; --input: #e2e8f0; --ring: #020817; --selection: #b4d7ff;
+}
+[data-theme="slate-dark"] {
+  --background: #020817; --foreground: #f8fafc;
+  --card: #020817; --card-foreground: #f8fafc;
+  --popover: #020817; --popover-foreground: #f8fafc;
+  --primary: #f8fafc; --primary-foreground: #0f172a;
+  --secondary: #1e293b; --secondary-foreground: #f8fafc;
+  --muted: #1e293b; --muted-foreground: #94a3b8;
+  --accent: #1e293b; --accent-foreground: #f8fafc;
+  --destructive: #ef4444; --destructive-foreground: #f8fafc;
+  --border: #1e293b; --input: #1e293b; --ring: #cbd5e1; --selection: #355172;
+}
+
+[data-theme="stone-light"] {
+  --background: #ffffff; --foreground: #0c0a09;
+  --card: #ffffff; --card-foreground: #0c0a09;
+  --popover: #ffffff; --popover-foreground: #0c0a09;
+  --primary: #1c1917; --primary-foreground: #fafaf9;
+  --secondary: #f5f5f4; --secondary-foreground: #1c1917;
+  --muted: #f5f5f4; --muted-foreground: #78716c;
+  --accent: #f5f5f4; --accent-foreground: #1c1917;
+  --destructive: #ef4444; --destructive-foreground: #fafaf9;
+  --border: #e7e5e4; --input: #e7e5e4; --ring: #0c0a09; --selection: #b4d7ff;
+}
+[data-theme="stone-dark"] {
+  --background: #0c0a09; --foreground: #fafaf9;
+  --card: #0c0a09; --card-foreground: #fafaf9;
+  --popover: #0c0a09; --popover-foreground: #fafaf9;
+  --primary: #fafaf9; --primary-foreground: #1c1917;
+  --secondary: #292524; --secondary-foreground: #fafaf9;
+  --muted: #292524; --muted-foreground: #a8a29e;
+  --accent: #292524; --accent-foreground: #fafaf9;
+  --destructive: #ef4444; --destructive-foreground: #fafaf9;
+  --border: #292524; --input: #292524; --ring: #d6d3d1; --selection: #355172;
+}
+
+[data-theme="neutral-light"] {
+  --background: #ffffff; --foreground: #0a0a0a;
+  --card: #ffffff; --card-foreground: #0a0a0a;
+  --popover: #ffffff; --popover-foreground: #0a0a0a;
+  --primary: #171717; --primary-foreground: #fafafa;
+  --secondary: #f5f5f5; --secondary-foreground: #171717;
+  --muted: #f5f5f5; --muted-foreground: #737373;
+  --accent: #f5f5f5; --accent-foreground: #171717;
+  --destructive: #ef4444; --destructive-foreground: #fafafa;
+  --border: #e5e5e5; --input: #e5e5e5; --ring: #0a0a0a; --selection: #b4d7ff;
+}
+
+[data-theme="gray-light"] {
+  --background: #ffffff; --foreground: #030712;
+  --card: #ffffff; --card-foreground: #030712;
+  --popover: #ffffff; --popover-foreground: #030712;
+  --primary: #111827; --primary-foreground: #f9fafb;
+  --secondary: #f3f4f6; --secondary-foreground: #111827;
+  --muted: #f3f4f6; --muted-foreground: #6b7280;
+  --accent: #f3f4f6; --accent-foreground: #111827;
+  --destructive: #ef4444; --destructive-foreground: #f9fafb;
+  --border: #e5e7eb; --input: #e5e7eb; --ring: #030712; --selection: #b4d7ff;
+}
+
+[data-theme="blue-light"] {
+  --background: #ffffff; --foreground: #020817;
+  --card: #ffffff; --card-foreground: #020817;
+  --popover: #ffffff; --popover-foreground: #020817;
+  --primary: #2563eb; --primary-foreground: #f8fafc;
+  --secondary: #f1f5f9; --secondary-foreground: #0f172a;
+  --muted: #f1f5f9; --muted-foreground: #64748b;
+  --accent: #f1f5f9; --accent-foreground: #0f172a;
+  --destructive: #ef4444; --destructive-foreground: #f8fafc;
+  --border: #e2e8f0; --input: #e2e8f0; --ring: #2563eb; --selection: #b4d7ff;
+}
+[data-theme="blue-dark"] {
+  --background: #020817; --foreground: #f8fafc;
+  --card: #020817; --card-foreground: #f8fafc;
+  --popover: #020817; --popover-foreground: #f8fafc;
+  --primary: #3b82f6; --primary-foreground: #0f172a;
+  --secondary: #1e293b; --secondary-foreground: #f8fafc;
+  --muted: #1e293b; --muted-foreground: #94a3b8;
+  --accent: #1e293b; --accent-foreground: #f8fafc;
+  --destructive: #ef4444; --destructive-foreground: #f8fafc;
+  --border: #1e293b; --input: #1e293b; --ring: #1d4ed8; --selection: #355172;
+}
+
+[data-theme="green-light"] {
+  --background: #ffffff; --foreground: #09090b;
+  --card: #ffffff; --card-foreground: #09090b;
+  --popover: #ffffff; --popover-foreground: #09090b;
+  --primary: #16a34a; --primary-foreground: #fff1f2;
+  --secondary: #f4f4f5; --secondary-foreground: #18181b;
+  --muted: #f4f4f5; --muted-foreground: #71717a;
+  --accent: #f4f4f5; --accent-foreground: #18181b;
+  --destructive: #ef4444; --destructive-foreground: #fafafa;
+  --border: #e4e4e7; --input: #e4e4e7; --ring: #16a34a; --selection: #b4d7ff;
+}
+
+[data-theme="orange-light"] {
+  --background: #ffffff; --foreground: #0c0a09;
+  --card: #ffffff; --card-foreground: #0c0a09;
+  --popover: #ffffff; --popover-foreground: #0c0a09;
+  --primary: #f97316; --primary-foreground: #fafaf9;
+  --secondary: #f5f5f4; --secondary-foreground: #1c1917;
+  --muted: #f5f5f4; --muted-foreground: #78716c;
+  --accent: #f5f5f4; --accent-foreground: #1c1917;
+  --destructive: #ef4444; --destructive-foreground: #fafaf9;
+  --border: #e7e5e4; --input: #e7e5e4; --ring: #f97316; --selection: #b4d7ff;
+}
+
+[data-theme="red-light"] {
+  --background: #ffffff; --foreground: #0a0a0a;
+  --card: #ffffff; --card-foreground: #0a0a0a;
+  --popover: #ffffff; --popover-foreground: #0a0a0a;
+  --primary: #dc2626; --primary-foreground: #fef2f2;
+  --secondary: #f5f5f5; --secondary-foreground: #171717;
+  --muted: #f5f5f5; --muted-foreground: #737373;
+  --accent: #f5f5f5; --accent-foreground: #171717;
+  --destructive: #ef4444; --destructive-foreground: #fafafa;
+  --border: #e5e5e5; --input: #e5e5e5; --ring: #dc2626; --selection: #b4d7ff;
+}
+
+[data-theme="rose-light"] {
+  --background: #ffffff; --foreground: #09090b;
+  --card: #ffffff; --card-foreground: #09090b;
+  --popover: #ffffff; --popover-foreground: #09090b;
+  --primary: #e11d48; --primary-foreground: #fff1f2;
+  --secondary: #f4f4f5; --secondary-foreground: #18181b;
+  --muted: #f4f4f5; --muted-foreground: #71717a;
+  --accent: #f4f4f5; --accent-foreground: #18181b;
+  --destructive: #ef4444; --destructive-foreground: #fafafa;
+  --border: #e4e4e7; --input: #e4e4e7; --ring: #e11d48; --selection: #b4d7ff;
+}
+
+[data-theme="violet-light"] {
+  --background: #ffffff; --foreground: #030712;
+  --card: #ffffff; --card-foreground: #030712;
+  --popover: #ffffff; --popover-foreground: #030712;
+  --primary: #7c3aed; --primary-foreground: #f9fafb;
+  --secondary: #f3f4f6; --secondary-foreground: #111827;
+  --muted: #f3f4f6; --muted-foreground: #6b7280;
+  --accent: #f3f4f6; --accent-foreground: #111827;
+  --destructive: #ef4444; --destructive-foreground: #f9fafb;
+  --border: #e5e7eb; --input: #e5e7eb; --ring: #7c3aed; --selection: #b4d7ff;
+}
+
+[data-theme="yellow-light"] {
+  --background: #ffffff; --foreground: #0c0a09;
+  --card: #ffffff; --card-foreground: #0c0a09;
+  --popover: #ffffff; --popover-foreground: #0c0a09;
+  --primary: #facc15; --primary-foreground: #422006;
+  --secondary: #f5f5f4; --secondary-foreground: #1c1917;
+  --muted: #f5f5f4; --muted-foreground: #78716c;
+  --accent: #f5f5f4; --accent-foreground: #1c1917;
+  --destructive: #ef4444; --destructive-foreground: #fafaf9;
+  --border: #e7e5e4; --input: #e7e5e4; --ring: #0c0a09; --selection: #b4d7ff;
+}
+
+/* ============================================================
+   Typography — semantic styles (text_styles_default.dart)
+   All sizes/weights/line-heights ported exactly.  Letter-spacing
+   converted from Flutter px to em (≈ -0.4 px @ size).
+   ============================================================ */
+
+html { font-family: var(--font-sans); color: var(--foreground); background: var(--background); }
+body { margin: 0; font-family: var(--font-sans); }
+
+/* Selection color — Flutter `selection` token */
+::selection { background: var(--selection); color: var(--foreground); }
+
+/* base reset for typography helpers */
+.t-h1-large, .t-h1, .t-h2, .t-h3, .t-h4,
+.t-p, .t-blockquote, .t-table, .t-list, .t-lead, .t-large, .t-small, .t-muted,
+.t-code {
+  font-family: var(--font-sans);
+  color: var(--foreground);
+  margin: 0;
+}
+
+.t-h1-large    { font-size: 48px; font-weight: 800; line-height: 1.0;   letter-spacing: -0.0083em; }
+.t-h1          { font-size: 36px; font-weight: 800; line-height: 1.111; letter-spacing: -0.0111em; }
+.t-h2          { font-size: 30px; font-weight: 600; line-height: 1.2;   letter-spacing: -0.0133em; }
+.t-h3          { font-size: 24px; font-weight: 600; line-height: 1.333; letter-spacing: -0.0166em; }
+.t-h4          { font-size: 20px; font-weight: 600; line-height: 1.4;   letter-spacing: -0.02em;   }
+.t-p           { font-size: 16px; font-weight: 400; line-height: 1.75; }
+.t-blockquote  { font-size: 16px; font-weight: 400; line-height: 1.5; font-style: italic;
+                 padding-left: 1rem; border-left: 2px solid var(--border);
+                 color: var(--foreground); }
+.t-table       { font-size: 16px; font-weight: 700; line-height: 1.5; }
+.t-list        { font-size: 16px; font-weight: 400; line-height: 1.5; }
+.t-lead        { font-size: 20px; font-weight: 400; line-height: 1.4;  color: var(--muted-foreground); }
+.t-large       { font-size: 18px; font-weight: 600; line-height: 1.555; }
+.t-small       { font-size: 14px; font-weight: 500; line-height: 1.0; }
+.t-muted       { font-size: 14px; font-weight: 400; line-height: 1.428; color: var(--muted-foreground); }
+.t-code        { font-family: var(--font-mono); font-size: 14px;
+                 background: var(--muted); color: var(--foreground);
+                 padding: 2px 6px; border-radius: var(--radius-sm); }
+
+/* ---------------------------------------------------------------------------
+   Brand accent — fixed to the chords logo orange (#f97316) across every theme
+   and mode. Placed after the [data-theme] blocks so it always wins.
+   --------------------------------------------------------------------------- */
+:root,
+[data-theme] {
+  --primary: #f97316;
+  --primary-foreground: #ffffff;
+  --ring: #f97316;
+}

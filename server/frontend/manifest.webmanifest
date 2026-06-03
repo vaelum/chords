@@ -1,0 +1,27 @@
+{
+  "name": "chords",
+  "short_name": "chords",
+  "description": "guitar tabs that follow you",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#1c1917",
+  "icons": [
+    {
+      "src": "assets/png/chords-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/png/chords-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/png/chords-icon-1024.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

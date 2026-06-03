@@ -1,0 +1,36 @@
+services:
+  chords:
+    container_name: chords
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    volumes:
+      - ${HOME}/.chords:/chords-data
+      # Forward the host's Claude Code login so the agent SDK can authenticate.
+      - ${HOME}/.claude:/home/chords/.claude
+      - ${HOME}/.claude.json:/home/chords/.claude.json
+    environment:
+      CHORDS_DATA_DIR: /chords-data
+    restart: unless-stopped
+
+  caddy:
+    container_name: chords-caddy
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ../caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../caddy/entrypoint.sh:/entrypoint.sh:ro
+      - ${HOME}/.chords:/chords-data:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    depends_on:
+      - chords
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

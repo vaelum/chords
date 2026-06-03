@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- background -->
+  <rect width="32" height="32" rx="7" fill="#18181b"/>
+
+  <!-- nut (thick top bar) -->
+  <rect x="8" y="8" width="16" height="2.5" rx="1" fill="#a1a1aa"/>
+
+  <!-- strings (vertical) -->
+  <line x1="10.5" y1="10.5" x2="10.5" y2="25" stroke="#52525b" stroke-width="1.2"/>
+  <line x1="16"   y1="10.5" x2="16"   y2="25" stroke="#52525b" stroke-width="1.2"/>
+  <line x1="21.5" y1="10.5" x2="21.5" y2="25" stroke="#52525b" stroke-width="1.2"/>
+
+  <!-- frets (horizontal) -->
+  <line x1="8.5" y1="14.5" x2="23.5" y2="14.5" stroke="#3f3f46" stroke-width="0.9"/>
+  <line x1="8.5" y1="18.5" x2="23.5" y2="18.5" stroke="#3f3f46" stroke-width="0.9"/>
+  <line x1="8.5" y1="22.5" x2="23.5" y2="22.5" stroke="#3f3f46" stroke-width="0.9"/>
+
+  <!-- chord dots — a simple, pleasing shape -->
+  <circle cx="10.5" cy="22.5" r="2.4" fill="#d97757"/>
+  <circle cx="16"   cy="14.5" r="2.4" fill="#d97757"/>
+  <circle cx="21.5" cy="18.5" r="2.4" fill="#d97757"/>
+</svg>

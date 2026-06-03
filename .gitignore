@@ -1,0 +1,13 @@
+.venv
+chords-data
+__pycache__
+.deploy-target
+.junie
+
+# Tauri app (app/) — Rust build output and generated mobile projects
+app/src-tauri/target/
+app/src-tauri/gen/
+# Untracked, machine-local server URL override (never commit a server address)
+app/server.local*
+# butler.py build artifacts (extension zips, etc.)
+dist/
