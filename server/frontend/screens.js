@@ -682,14 +682,7 @@ function PlaylistDetail({
     size: 11
   }), " Shared playlist"), /*#__PURE__*/React.createElement(Badge, {
     variant: "outline"
-  }, entries.length, " songs")), /*#__PURE__*/React.createElement("h2", {
-    style: {
-      fontSize: 32,
-      fontWeight: 800,
-      letterSpacing: '-0.025em',
-      margin: 0
-    }
-  }, pl.name), /*#__PURE__*/React.createElement("div", {
+  }, entries.length, " songs")), /*#__PURE__*/React.createElement("div", {
     className: "sub"
   }, "Owned by ", owner?.name, pl.ownerId === 'u_me' ? ' (you)' : '', " \xB7 Updated ", relTime(pl.updatedAt)), pl.shared && /*#__PURE__*/React.createElement("div", {
     className: "pl-collab-row"

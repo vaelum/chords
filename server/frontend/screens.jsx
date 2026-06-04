@@ -375,7 +375,6 @@ function PlaylistDetail({ playlist, store, onOpenSong, onBack }) {
             {pl.shared && <Badge variant="primary"><Icon name="users" size={11} /> Shared playlist</Badge>}
             <Badge variant="outline">{entries.length} songs</Badge>
           </div>
-          <h2 style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.025em', margin: 0 }}>{pl.name}</h2>
           <div className="sub">Owned by {owner?.name}{pl.ownerId === 'u_me' ? ' (you)' : ''} · Updated {relTime(pl.updatedAt)}</div>
           {pl.shared && (
             <div className="pl-collab-row">
