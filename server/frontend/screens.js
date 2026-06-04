@@ -472,10 +472,6 @@ function PlaylistsScreen({
     }
   }, "Songs"), /*#__PURE__*/React.createElement("th", {
     style: {
-      width: 160
-    }
-  }, "Updated"), /*#__PURE__*/React.createElement("th", {
-    style: {
       width: 44
     }
   }))), /*#__PURE__*/React.createElement("tbody", null, playlists.map(p => /*#__PURE__*/React.createElement("tr", {
@@ -504,8 +500,6 @@ function PlaylistsScreen({
   }), " Shared"))), /*#__PURE__*/React.createElement("td", {
     className: "t-muted"
   }, p.entries.length), /*#__PURE__*/React.createElement("td", {
-    className: "t-muted"
-  }, relTime(p.updatedAt)), /*#__PURE__*/React.createElement("td", {
     style: {
       textAlign: 'right'
     }
