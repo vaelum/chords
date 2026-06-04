@@ -1398,6 +1398,17 @@ function SettingsScreen({
     className: "grow"
   }, /*#__PURE__*/React.createElement("div", {
     className: "row-title"
+  }, "Playback bar at top"), /*#__PURE__*/React.createElement("div", {
+    className: "row-desc"
+  }, "Show the autoscroll controls at the top of the song view instead of the bottom.")), /*#__PURE__*/React.createElement(Switch, {
+    on: tweaks.barAtTop,
+    onChange: v => setTweak('barAtTop', v)
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "settings-row"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "grow"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "row-title"
   }, "Metronome count-in"), /*#__PURE__*/React.createElement("div", {
     className: "row-desc"
   }, "Flash the playback bar at the song's tempo (BPM) before autoscroll starts.")), /*#__PURE__*/React.createElement(Switch, {

@@ -83,7 +83,7 @@ function shiftKey(key, steps) {
 function SongView({ song, playlist, store, onBack,
                     openShare, openAddToPlaylist, onEdit, onPrev, onNext,
                     lyricSize, setLyricSize, keepAwake, chordColor = 'orange',
-                    metronome = false, metronomeBeats = 4, readOnly = false }) {
+                    metronome = false, metronomeBeats = 4, barAtTop = false, readOnly = false }) {
   const [speed, setSpeed] = useStateSV(song.scrollSpeed || 1.0);
   // In read-only mode (public share link) key/capo/tempo changes are kept as
   // local-only overrides — they never persist. In normal mode these stay null
@@ -447,6 +447,123 @@ function SongView({ song, playlist, store, onBack,
 
   const collabs = (playlist && playlist.collaborators || []).map(id => window.IT.USERS.find(u => u.id === id)).filter(Boolean);
 
+  // Popover vertical anchoring: cards open upward off a bottom bar, downward off
+  // a top bar. Spread into each popover-card so they never open off-screen.
+  const popVert = barAtTop
+    ? { top: '100%', bottom: 'auto', marginTop: 6, marginBottom: 0 }
+    : { bottom: '100%' };
+
+  // Playback / autoscroll bar. Rendered either at the top or bottom of the shell
+  // depending on the barAtTop preference; `at-top` flips its border + safe-area
+  // padding in CSS.
+  const autoscrollBar = (
+      <div className={`autoscroll-bar${barAtTop ? ' at-top' : ''}${autoscroll ? ' playing' : ''}${countIn ? ' metronome' : ''}`}
+           style={countIn
+             ? { '--beat-period': beatPeriodMs + 'ms', '--beat-count': beatCount }
+             : undefined}>
+
+        {/* Left: sections + to-top */}
+        <div className={`as-left${autoscroll ? ' as-hidden' : ''}`}>
+          {sections.length > 0 && (
+            <div className="popover-anchor">
+              <button className={`as-icon-btn ${sectionsOpen ? 'on' : ''}`}
+                      onClick={() => { setSectionsOpen(v => !v); setFontPopOpen(false); setModePopOpen(false); }}
+                      aria-label="Jump to section">
+                <Icon name="list" size={16} />
+              </button>
+              {sectionsOpen && (
+                <div className="popover-card" style={{ minWidth: 160, left: 0, right: 'auto', ...popVert }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted-foreground)',
+                                textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>
+                    Sections
+                  </div>
+                  {sections.map((name, i) => (
+                    <button key={i} onClick={() => jumpToSection(i)} className="section-jump-btn">
+                      {name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          <button className="as-icon-btn" onClick={scrollToTop} aria-label="Scroll to top">
+            <Icon name="arrowUp" size={16} />
+          </button>
+        </div>
+
+        {/* Centre: speed mode + speed + play */}
+        <div className="as-group">
+          <div className="popover-anchor">
+            <button className={`as-icon-btn ${modePopOpen ? 'on' : ''}`}
+                    onClick={() => { setModePopOpen(v => !v); setFontPopOpen(false); setSectionsOpen(false); }}
+                    aria-label="Scroll speed mode" title="Scroll speed mode">
+              <Icon name="metronome" size={16} />
+            </button>
+            {modePopOpen && (
+              <div className="popover-card" style={{ minWidth: 210, left: '50%', right: 'auto', transform: 'translateX(-50%)', ...popVert }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted-foreground)',
+                              textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>
+                  Scroll speed
+                </div>
+                <div className="seg-switch" style={{ width: '100%', marginBottom: 0 }}>
+                  <button className={`seg-item ${!densityMode ? 'on' : ''}`} style={{ flex: 1 }}
+                          onClick={() => setDensity(false)}>Constant</button>
+                  <button className={`seg-item ${densityMode ? 'on' : ''}`} style={{ flex: 1 }}
+                          onClick={() => setDensity(true)}>Adaptive</button>
+                </div>
+                <div style={{ marginTop: 8, fontSize: 11, lineHeight: 1.4, color: 'var(--muted-foreground)' }}>
+                  Adaptive slows down on chord-heavy lines and speeds up on sparse ones.
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="as-divider" />
+          <button className="as-icon-btn" onClick={() => handleSpeed(-0.1)} aria-label="Slower">
+            <Icon name="minus" size={14} />
+          </button>
+          <span className="as-speed-val">
+            {(speed * 2).toFixed(1)}<span style={{ fontSize: 10, marginLeft: 2, opacity: .6 }}>x</span>
+          </span>
+          <button className="as-icon-btn" onClick={() => handleSpeed(0.1)} aria-label="Faster">
+            <Icon name="plus" size={14} />
+          </button>
+          <div className="as-divider" />
+          <button className="as-play" onClick={toggleAutoscroll}
+                  aria-label={autoscroll ? 'Stop autoscroll' : 'Play autoscroll'}>
+            <Icon name={autoscroll ? 'pause' : 'play'} size={16} />
+          </button>
+        </div>
+
+        {/* Right: text size */}
+        <div className={`as-right${autoscroll ? ' as-hidden' : ''}`}>
+          <div className="popover-anchor">
+            <button className={`as-icon-btn ${fontPopOpen ? 'on' : ''}`}
+                    onClick={() => { setFontPopOpen(v => !v); setSectionsOpen(false); setModePopOpen(false); }}
+                    aria-label="Text size">
+              <Icon name="textSize" size={18} />
+            </button>
+            {fontPopOpen && (
+              <div className="popover-card" style={popVert}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <span className="t-small">Text size</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--muted-foreground)' }}>{lyricSize}px</span>
+                </div>
+                <input type="range" className="as-slider" min="12" max="32" step="1"
+                       value={lyricSize} onChange={(e) => setLyricSize(+e.target.value)} />
+                <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
+                  {[14, 16, 20, 24].map(s => (
+                    <button key={s} className="btn btn-outline btn-sm" style={{ flex: 1, padding: 0 }}
+                            onClick={() => setLyricSize(s)}>{s}</button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+      </div>
+  );
+
   return (
     <div className="sv-shell" data-chord-color={chordColor}>
       {/* Top bars — hidden while autoscrolling to maximise reading space */}
@@ -636,120 +753,15 @@ function SongView({ song, playlist, store, onBack,
         </>
       )}
 
+      {/* When pinned to the top, the bar sits below the header/meta bars while
+          they're visible, and rises to the top once they hide on autoscroll. */}
+      {barAtTop && autoscrollBar}
+
       <div className="sv-scroll" ref={scrollRef}>
         <SongBody lines={parsedLines} lyricSize={lyricSize} contentRef={contentRef} />
       </div>
 
-      {/* Bottom bar: 3-col grid — left / centre / right
-          Side cols always rendered (visibility:hidden when playing) so centre never shifts.
-          During the metronome count-in the bar pulses once per beat for the
-          configured number of beats, then scrolling starts. --beat-period
-          (60000/BPM ms) and --beat-count drive the pure-CSS flash animation. */}
-      <div className={`autoscroll-bar${autoscroll ? ' playing' : ''}${countIn ? ' metronome' : ''}`}
-           style={countIn
-             ? { '--beat-period': beatPeriodMs + 'ms', '--beat-count': beatCount }
-             : undefined}>
-
-        {/* Left: sections + to-top */}
-        <div className={`as-left${autoscroll ? ' as-hidden' : ''}`}>
-          {sections.length > 0 && (
-            <div className="popover-anchor">
-              <button className={`as-icon-btn ${sectionsOpen ? 'on' : ''}`}
-                      onClick={() => { setSectionsOpen(v => !v); setFontPopOpen(false); setModePopOpen(false); }}
-                      aria-label="Jump to section">
-                <Icon name="list" size={16} />
-              </button>
-              {sectionsOpen && (
-                <div className="popover-card" style={{ minWidth: 160, left: 0, right: 'auto', bottom: '100%' }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted-foreground)',
-                                textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>
-                    Sections
-                  </div>
-                  {sections.map((name, i) => (
-                    <button key={i} onClick={() => jumpToSection(i)} className="section-jump-btn">
-                      {name}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-          <button className="as-icon-btn" onClick={scrollToTop} aria-label="Scroll to top">
-            <Icon name="arrowUp" size={16} />
-          </button>
-        </div>
-
-        {/* Centre: speed mode + speed + play */}
-        <div className="as-group">
-          <div className="popover-anchor">
-            <button className={`as-icon-btn ${modePopOpen ? 'on' : ''}`}
-                    onClick={() => { setModePopOpen(v => !v); setFontPopOpen(false); setSectionsOpen(false); }}
-                    aria-label="Scroll speed mode" title="Scroll speed mode">
-              <Icon name="metronome" size={16} />
-            </button>
-            {modePopOpen && (
-              <div className="popover-card" style={{ minWidth: 210, left: '50%', right: 'auto', transform: 'translateX(-50%)', bottom: '100%' }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted-foreground)',
-                              textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>
-                  Scroll speed
-                </div>
-                <div className="seg-switch" style={{ width: '100%', marginBottom: 0 }}>
-                  <button className={`seg-item ${!densityMode ? 'on' : ''}`} style={{ flex: 1 }}
-                          onClick={() => setDensity(false)}>Constant</button>
-                  <button className={`seg-item ${densityMode ? 'on' : ''}`} style={{ flex: 1 }}
-                          onClick={() => setDensity(true)}>Adaptive</button>
-                </div>
-                <div style={{ marginTop: 8, fontSize: 11, lineHeight: 1.4, color: 'var(--muted-foreground)' }}>
-                  Adaptive slows down on chord-heavy lines and speeds up on sparse ones.
-                </div>
-              </div>
-            )}
-          </div>
-          <div className="as-divider" />
-          <button className="as-icon-btn" onClick={() => handleSpeed(-0.1)} aria-label="Slower">
-            <Icon name="minus" size={14} />
-          </button>
-          <span className="as-speed-val">
-            {(speed * 2).toFixed(1)}<span style={{ fontSize: 10, marginLeft: 2, opacity: .6 }}>x</span>
-          </span>
-          <button className="as-icon-btn" onClick={() => handleSpeed(0.1)} aria-label="Faster">
-            <Icon name="plus" size={14} />
-          </button>
-          <div className="as-divider" />
-          <button className="as-play" onClick={toggleAutoscroll}
-                  aria-label={autoscroll ? 'Stop autoscroll' : 'Play autoscroll'}>
-            <Icon name={autoscroll ? 'pause' : 'play'} size={16} />
-          </button>
-        </div>
-
-        {/* Right: text size */}
-        <div className={`as-right${autoscroll ? ' as-hidden' : ''}`}>
-          <div className="popover-anchor">
-            <button className={`as-icon-btn ${fontPopOpen ? 'on' : ''}`}
-                    onClick={() => { setFontPopOpen(v => !v); setSectionsOpen(false); setModePopOpen(false); }}
-                    aria-label="Text size">
-              <Icon name="textSize" size={18} />
-            </button>
-            {fontPopOpen && (
-              <div className="popover-card">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                  <span className="t-small">Text size</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--muted-foreground)' }}>{lyricSize}px</span>
-                </div>
-                <input type="range" className="as-slider" min="12" max="32" step="1"
-                       value={lyricSize} onChange={(e) => setLyricSize(+e.target.value)} />
-                <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
-                  {[14, 16, 20, 24].map(s => (
-                    <button key={s} className="btn btn-outline btn-sm" style={{ flex: 1, padding: 0 }}
-                            onClick={() => setLyricSize(s)}>{s}</button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-      </div>
+      {!barAtTop && autoscrollBar}
     </div>
   );
 }

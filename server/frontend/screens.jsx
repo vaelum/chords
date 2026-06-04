@@ -760,6 +760,13 @@ function SettingsScreen({ store, tweaks, setTweak }) {
         </div>
         <div className="settings-row">
           <div className="grow">
+            <div className="row-title">Playback bar at top</div>
+            <div className="row-desc">Show the autoscroll controls at the top of the song view instead of the bottom.</div>
+          </div>
+          <Switch on={tweaks.barAtTop} onChange={(v) => setTweak('barAtTop', v)} />
+        </div>
+        <div className="settings-row">
+          <div className="grow">
             <div className="row-title">Metronome count-in</div>
             <div className="row-desc">Flash the playback bar at the song's tempo (BPM) before autoscroll starts.</div>
           </div>
