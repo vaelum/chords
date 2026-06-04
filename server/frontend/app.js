@@ -9,6 +9,13 @@ const {
   useRef: useRefA
 } = React;
 
+// The build id baked into this page by the server (main.py injects it). The
+// /events stream reports the server's current build on every connect; when it
+// no longer matches this — i.e. we reconnected after a deploy — useStore flips
+// updateReady and we surface a reload prompt. Null in the native Tauri shell
+// (which serves its own bundle, not through the backend), where we never prompt.
+const LOADED_BUILD = window.__BUILD_ID__ || null;
+
 // Turn a song/playlist title into a tidy download filename (no extension).
 function safeFileName(name) {
   const cleaned = String(name).trim().replace(/[^\w\-]+/g, '-').replace(/^-+|-+$/g, '');
@@ -397,6 +404,9 @@ function useStore() {
   const [songs, setSongs] = useStateA([]);
   const [playlists, setPlaylists] = useStateA([]);
   const [inbox, setInbox] = useStateA([]);
+  // Flips true when the SSE stream reports a build id newer than the one this
+  // page loaded (see LOADED_BUILD) — i.e. a deploy happened under us.
+  const [updateReady, setUpdateReady] = useStateA(false);
   function _normalizeUsers(users, meId) {
     const normalized = users.map(u => ({
       ...u,
@@ -846,6 +856,13 @@ function useStore() {
     });
     const onEvent = evt => {
       if (!evt || !evt.type) return;
+      // First frame of every (re)connect: the server's current build id. If it
+      // differs from what we loaded, a new version is live — prompt to reload.
+      // (Once true it stays true; reconnect churn can't unset it.)
+      if (evt.type === 'hello') {
+        if (LOADED_BUILD && evt.build && evt.build !== LOADED_BUILD) setUpdateReady(true);
+        return;
+      }
       // Skip the echo of a change this very tab made (it already updated locally).
       if (evt.origin && evt.origin === window.IT.clientId) return;
       if (evt.type === 'inbox') refetchInbox();else if (evt.type === 'song' && evt.id) refetchSong(evt.id);else if (evt.type === 'songs') refetchSongs();else if (evt.type === 'playlist' && evt.id) refetchPlaylist(evt.id);else if (evt.type === 'playlists') refetchPlaylists();
@@ -918,8 +935,9 @@ function useStore() {
     changePassword,
     getPlaylist,
     getSong,
+    updateReady,
     ...stubs
-  }), [loading, currentUser, songs, playlists, inbox]);
+  }), [loading, currentUser, songs, playlists, inbox, updateReady]);
 }
 
 // ---------- theme mapping ----------
@@ -1288,6 +1306,44 @@ function App() {
     setTweaks: setTweaks
   });
 }
+
+// Shown when the server has deployed a newer build than this page loaded. We
+// prompt rather than auto-reload so we never discard unsaved work or yank the
+// user mid-song; reloading fetches the fresh index.html and assets.
+function UpdateBanner() {
+  return /*#__PURE__*/React.createElement("div", {
+    role: "status",
+    style: {
+      position: 'fixed',
+      zIndex: 200,
+      left: '50%',
+      bottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
+      transform: 'translateX(-50%)',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 12,
+      maxWidth: 'calc(100vw - 24px)',
+      padding: '10px 10px 10px 16px',
+      background: 'var(--popover)',
+      color: 'var(--popover-foreground)',
+      border: '1px solid var(--border)',
+      borderRadius: 12,
+      boxShadow: '0 8px 28px rgba(0,0,0,.35)'
+    }
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "refresh",
+    size: 16
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 14,
+      whiteSpace: 'nowrap'
+    }
+  }, "A new version is available."), /*#__PURE__*/React.createElement(Btn, {
+    variant: "primary",
+    size: "sm",
+    onClick: () => window.location.reload()
+  }, "Reload"));
+}
 function AppShell({
   store,
   tweaks,
@@ -1421,7 +1477,7 @@ function AppShell({
   const activeNav = route.name === 'playlist' ? 'playlists' : route.name === 'song' ? route.playlistId ? 'playlists' : 'library' : route.name;
   const noChrome = route.name === 'song';
   const me = store.currentUser;
-  return /*#__PURE__*/React.createElement(ToastProvider, null, /*#__PURE__*/React.createElement("div", {
+  return /*#__PURE__*/React.createElement(ToastProvider, null, store.updateReady && /*#__PURE__*/React.createElement(UpdateBanner, null), /*#__PURE__*/React.createElement("div", {
     className: `app ${noChrome ? 'no-chrome' : ''}`
   }, /*#__PURE__*/React.createElement("aside", {
     className: "sidebar"
