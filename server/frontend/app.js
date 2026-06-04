@@ -948,7 +948,8 @@ const DEFAULTS = /*EDITMODE-BEGIN*/{
   "keepAwake": true,
   "chordColor": "orange",
   "metronome": false,
-  "metronomeBeats": 4
+  "metronomeBeats": 4,
+  "barAtTop": false
 } /*EDITMODE-END*/;
 
 // Lyric text size is a per-device preference, persisted client-side.
@@ -992,6 +993,18 @@ function loadMetronomeBeats() {
     if (!isNaN(v) && v >= 1 && v <= 16) return v;
   } catch (e) {}
   return DEFAULTS.metronomeBeats;
+}
+
+// Autoscroll bar position — render the playback controls at the top of the song
+// view instead of the bottom. Per-device preference, persisted client-side.
+const BAR_AT_TOP_KEY = 'chords.barAtTop';
+function loadBarAtTop() {
+  try {
+    const v = localStorage.getItem(BAR_AT_TOP_KEY);
+    if (v === '1') return true;
+    if (v === '0') return false;
+  } catch (e) {}
+  return DEFAULTS.barAtTop;
 }
 
 // ---------- Public read-only playlist (shared link) ----------
@@ -1110,7 +1123,8 @@ function PublicPlaylistView({
       keepAwake: tweaks.keepAwake,
       chordColor: tweaks.chordColor,
       metronome: tweaks.metronome,
-      metronomeBeats: tweaks.metronomeBeats
+      metronomeBeats: tweaks.metronomeBeats,
+      barAtTop: tweaks.barAtTop
     })))));
   }
 
@@ -1204,7 +1218,8 @@ function App() {
     lyricSize: loadLyricSize(),
     chordColor: loadChordColor(),
     metronome: loadMetronome(),
-    metronomeBeats: loadMetronomeBeats()
+    metronomeBeats: loadMetronomeBeats(),
+    barAtTop: loadBarAtTop()
   }));
   const params = new URLSearchParams(window.location.search);
   const inviteToken = params.get('invite');
@@ -1333,6 +1348,11 @@ function AppShell({
     if ('metronomeBeats' in edits) {
       try {
         localStorage.setItem(METRONOME_BEATS_KEY, String(edits.metronomeBeats));
+      } catch (e) {}
+    }
+    if ('barAtTop' in edits) {
+      try {
+        localStorage.setItem(BAR_AT_TOP_KEY, edits.barAtTop ? '1' : '0');
       } catch (e) {}
     }
     try {
@@ -1557,7 +1577,8 @@ function AppShell({
       keepAwake: tweaks.keepAwake,
       chordColor: tweaks.chordColor,
       metronome: tweaks.metronome,
-      metronomeBeats: tweaks.metronomeBeats
+      metronomeBeats: tweaks.metronomeBeats,
+      barAtTop: tweaks.barAtTop
     });
   })(), route.name === 'song' && !currentSong && /*#__PURE__*/React.createElement("div", {
     className: "page"

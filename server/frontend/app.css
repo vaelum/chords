@@ -699,6 +699,15 @@ button { font-family: inherit; }
 /* playing: 20% smaller than base, buttons stay same size */
 .autoscroll-bar.playing { height: 50px; }
 
+/* at-top: border + safe-area padding move to the opposite edge so the bar sits
+   flush under the device's top inset instead of the bottom home indicator. */
+.autoscroll-bar.at-top {
+  border-top: 0;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
 /* Metronome count-in — when autoscroll starts with the metronome enabled, the
    bar pulses once per beat for --beat-count beats, then scrolling begins.
    --beat-period (= 60000/BPM ms) and --beat-count are set inline on the bar, so
