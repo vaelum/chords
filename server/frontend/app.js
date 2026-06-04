@@ -1317,31 +1317,35 @@ function UpdateBanner() {
       position: 'fixed',
       zIndex: 200,
       left: '50%',
-      bottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
+      top: 'calc(env(safe-area-inset-top, 0px) + 16px)',
       transform: 'translateX(-50%)',
       display: 'flex',
       alignItems: 'center',
-      gap: 12,
+      gap: 24,
       maxWidth: 'calc(100vw - 24px)',
-      padding: '10px 10px 10px 16px',
+      padding: '20px 20px 20px 32px',
       background: 'var(--popover)',
       color: 'var(--popover-foreground)',
       border: '1px solid var(--border)',
-      borderRadius: 12,
-      boxShadow: '0 8px 28px rgba(0,0,0,.35)'
+      borderRadius: 24,
+      boxShadow: '0 16px 56px rgba(0,0,0,.35)'
     }
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "refresh",
-    size: 16
+    size: 32
   }), /*#__PURE__*/React.createElement("span", {
     style: {
-      fontSize: 14,
+      fontSize: 28,
       whiteSpace: 'nowrap'
     }
   }, "A new version is available."), /*#__PURE__*/React.createElement(Btn, {
     variant: "primary",
-    size: "sm",
-    onClick: () => window.location.reload()
+    onClick: () => window.location.reload(),
+    style: {
+      fontSize: 28,
+      height: 60,
+      padding: '0 36px'
+    }
   }, "Reload"));
 }
 function AppShell({

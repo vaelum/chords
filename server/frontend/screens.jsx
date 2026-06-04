@@ -260,7 +260,7 @@ function PlaylistsScreen({ store, onOpen }) {
       ) : (
         <table className="data-table">
           <thead>
-            <tr><th>Name</th><th style={{ width: 90 }}>Songs</th><th style={{ width: 160 }}>Updated</th><th style={{ width: 44 }}></th></tr>
+            <tr><th>Name</th><th style={{ width: 90 }}>Songs</th><th style={{ width: 44 }}></th></tr>
           </thead>
           <tbody>
             {playlists.map(p => (
@@ -272,7 +272,6 @@ function PlaylistsScreen({ store, onOpen }) {
                   </div>
                 </td>
                 <td className="t-muted">{p.entries.length}</td>
-                <td className="t-muted">{relTime(p.updatedAt)}</td>
                 <td style={{ textAlign: 'right' }}>
                   <IconBtn icon="more" label="More" onClick={(e) => { e.stopPropagation(); setMenuFor({ anchor: e.currentTarget, pl: p }); }} />
                 </td>
