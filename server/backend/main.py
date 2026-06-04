@@ -37,10 +37,22 @@ FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
 # constant for the life of the process). The client reads window.__BUILD_ID__ to
 # learn which build it loaded, then compares it against the id the /events stream
 # reports on (re)connect — a mismatch after a deploy triggers the reload prompt.
-_INDEX_HTML = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8").replace(
-    "</head>",
-    f'  <script>window.__BUILD_ID__ = "{BUILD_ID}";</script>\n</head>',
-    1,
+#
+# The same id also stamps every asset URL: index.html ships with a literal
+# `?v=__ASSET_VERSION__` placeholder, which we swap for BUILD_ID here. Because the
+# id is the content hash of the served assets, any change to a .js/.css yields a
+# new query string on the next process start, so browsers fetch the new bytes
+# instead of a stale cache — no manual version bumping. (The placeholder is hashed
+# in version.py, so it stays stable and doesn't depend on its own substitution.)
+_INDEX_HTML = (
+    (FRONTEND_DIR / "index.html")
+    .read_text(encoding="utf-8")
+    .replace("__ASSET_VERSION__", BUILD_ID)
+    .replace(
+        "</head>",
+        f'  <script>window.__BUILD_ID__ = "{BUILD_ID}";</script>\n</head>',
+        1,
+    )
 )
 
 
