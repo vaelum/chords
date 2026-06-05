@@ -15,5 +15,7 @@ else
   git remote add "$REMOTE" "$GITHUB_URL"
 fi
 
-# Push only main.
-git push "$REMOTE" "$BRANCH"
+# Push only main, plus any annotated tags reachable from it (so version tags
+# like v0.1.0 reach GitHub and trigger the release workflow). Use annotated
+# tags: git tag -a v0.1.0 -m v0.1.0
+git push --follow-tags "$REMOTE" "$BRANCH"
