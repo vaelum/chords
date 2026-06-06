@@ -184,9 +184,45 @@ function relTime(t) {
   return dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+// Device-only edge-spacing adjuster. Shared by Settings and the song-view ⋮
+// menu. Uses a transparent backdrop (not a dimming scrim) so the live padding
+// change at the screen edges stays visible as you drag the sliders.
+function SpacingPopup({ open, onClose, gaps, setGaps }) {
+  if (!open) return null;
+  const g = gaps || { top: 0, bottom: 0 };
+  const set = (k, v) => setGaps && setGaps({ ...g, [k]: Math.max(0, Math.min(200, v | 0)) });
+  return (
+    <>
+      <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={onClose} />
+      <div className="sv-center-popup" style={{ minWidth: 300, maxWidth: 360 }}>
+        <div className="sv-center-popup-head">
+          <span>Edge spacing</span>
+          <button className="btn btn-ghost btn-icon btn-sm" onClick={onClose}><Icon name="close" size={14} /></button>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {[['top', 'Top'], ['bottom', 'Bottom']].map(([k, label]) => (
+            <div key={k}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+                <span>{label}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--muted-foreground)' }}>{g[k] || 0}px</span>
+              </div>
+              <input type="range" className="gap-slider" min="0" max="200" step="2"
+                     value={g[k] || 0}
+                     onChange={(e) => set(k, parseInt(e.target.value, 10))}
+                     aria-label={`${label} spacing`} />
+            </div>
+          ))}
+        </div>
+        <button className="btn btn-ghost btn-sm" style={{ marginTop: 18, width: '100%' }}
+                onClick={() => setGaps && setGaps({ ...g, top: 0, bottom: 0 })}>Reset</button>
+      </div>
+    </>
+  );
+}
+
 Object.assign(window, {
   Btn, IconBtn, Input, SearchInput, Badge, Switch,
-  Dialog, Sheet, Menu, useMenu,
+  Dialog, Sheet, Menu, useMenu, SpacingPopup,
   ToastProvider, useToast,
   Avatar, Empty, relTime,
 });

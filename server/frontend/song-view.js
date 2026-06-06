@@ -121,7 +121,12 @@ function SongView({
   metronome = false,
   metronomeBeats = 4,
   barAtTop = false,
-  readOnly = false
+  readOnly = false,
+  gaps = {
+    top: 0,
+    bottom: 0
+  },
+  setGaps = null
 }) {
   const [speed, setSpeed] = useStateSV(song.scrollSpeed || 1.0);
   // In read-only mode (public share link) key/capo/tempo changes are kept as
@@ -142,6 +147,7 @@ function SongView({
   const [keyPopOpen, setKeyPopOpen] = useStateSV(false);
   const [capoPopOpen, setCapoPopOpen] = useStateSV(false);
   const [tempoPopOpen, setTempoPopOpen] = useStateSV(false);
+  const [spacingOpen, setSpacingOpen] = useStateSV(false);
   const chordsListRef = useRefSV(null);
   const scrollRef = useRefSV(null);
   const contentRef = useRefSV(null);
@@ -169,6 +175,10 @@ function SongView({
   // the song's tempo. Shared by the count-in timer and the bar's flash animation.
   const beatCount = Math.min(16, Math.max(1, metronomeBeats || 4));
   const beatPeriodMs = 60000 / Math.min(300, Math.max(20, vTempo));
+
+  // Device-only edge gaps are applied app-wide at the root (see AppShell). The
+  // ⋮ menu opens a shared SpacingPopup so the user can tune them live here.
+
   async function addToLibrary() {
     try {
       await store.copySongToLibrary(song.id);
@@ -793,7 +803,11 @@ function SongView({
       label: 'Add to playlist',
       icon: 'list',
       onSelect: openAddToPlaylist
-    }, ...(playlist ? [{
+    }, ...(setGaps ? [{
+      label: 'Adjust spacing',
+      icon: 'spacing',
+      onSelect: () => setSpacingOpen(true)
+    }] : []), ...(playlist ? [{
       label: 'Add to library',
       icon: 'plus',
       onSelect: addToLibrary
@@ -1048,7 +1062,12 @@ function SongView({
       fontSize: 14,
       padding: '4px 10px'
     }
-  }, c))))), barAtTop && autoscrollBar, /*#__PURE__*/React.createElement("div", {
+  }, c))))), /*#__PURE__*/React.createElement(SpacingPopup, {
+    open: spacingOpen,
+    onClose: () => setSpacingOpen(false),
+    gaps: gaps,
+    setGaps: setGaps
+  }), barAtTop && autoscrollBar, /*#__PURE__*/React.createElement("div", {
     className: "sv-scroll",
     ref: scrollRef
   }, /*#__PURE__*/React.createElement(SongBody, {

@@ -538,8 +538,12 @@ button { font-family: inherit; }
 .sv-scroll {
   flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
   /* 1/3-viewport of blank space top & bottom so the first lines start lower and
-     the last line can scroll up to a comfortable reading position. */
-  padding: 33.333dvh 24px;
+     the last line can scroll up to a comfortable reading position. Capped to the
+     space actually available (--app-height minus the song-view chrome) so that
+     when --app-height shrinks — edge-spacing gaps, or a short screen — this
+     non-shrinkable padding can't push the bottom play bar out of view and get it
+     clipped. On tall screens the min() keeps the original 33.333dvh. */
+  padding: min(33.333dvh, calc((var(--app-height, 100dvh) - 280px) / 2)) 24px;
   /* No scroll-behavior:smooth: the autoscroll rAF loop writes scrollTop every
      frame, and CSS smooth-scroll restarts an animation each write, stalling the
      scroll on iOS Safari. scrollToTop/jumpToSection animate via scrollTo() instead. */
@@ -556,7 +560,7 @@ button { font-family: inherit; }
   overflow-wrap: anywhere;
 }
 @media (max-width: 600px) {
-  .sv-scroll { padding: 33.333dvh 14px; }
+  .sv-scroll { padding-left: 14px; padding-right: 14px; }
 }
 
 /* Segmented 3-way switch (Add song: Web / Text or image / Manual) */
@@ -906,6 +910,9 @@ button { font-family: inherit; }
   margin-bottom: 8px;
 }
 .settings-row .grow { flex: 1; min-width: 0; }
+
+/* Edge-spacing slider — a grabbable horizontal control (drag left↔right). */
+.gap-slider { width: 100%; height: 28px; cursor: pointer; accent-color: var(--primary); }
 .settings-row .row-title { font-size: 14px; font-weight: 600; }
 .settings-row .row-desc { font-size: 13px; color: var(--muted-foreground); margin-top: 2px; }
 
