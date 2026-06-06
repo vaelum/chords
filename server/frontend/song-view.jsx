@@ -83,7 +83,8 @@ function shiftKey(key, steps) {
 function SongView({ song, playlist, store, onBack,
                     openShare, openAddToPlaylist, onEdit, onPrev, onNext,
                     lyricSize, setLyricSize, keepAwake, chordColor = 'orange',
-                    metronome = false, metronomeBeats = 4, barAtTop = false, readOnly = false }) {
+                    metronome = false, metronomeBeats = 4, barAtTop = false, readOnly = false,
+                    gaps = { top: 0, bottom: 0 }, setGaps = null }) {
   const [speed, setSpeed] = useStateSV(song.scrollSpeed || 1.0);
   // In read-only mode (public share link) key/capo/tempo changes are kept as
   // local-only overrides — they never persist. In normal mode these stay null
@@ -103,6 +104,7 @@ function SongView({ song, playlist, store, onBack,
   const [keyPopOpen, setKeyPopOpen] = useStateSV(false);
   const [capoPopOpen, setCapoPopOpen] = useStateSV(false);
   const [tempoPopOpen, setTempoPopOpen] = useStateSV(false);
+  const [spacingOpen, setSpacingOpen] = useStateSV(false);
   const chordsListRef = useRefSV(null);
   const scrollRef = useRefSV(null);
   const contentRef = useRefSV(null);
@@ -130,6 +132,9 @@ function SongView({ song, playlist, store, onBack,
   // the song's tempo. Shared by the count-in timer and the bar's flash animation.
   const beatCount = Math.min(16, Math.max(1, metronomeBeats || 4));
   const beatPeriodMs = 60000 / Math.min(300, Math.max(20, vTempo));
+
+  // Device-only edge gaps are applied app-wide at the root (see AppShell). The
+  // ⋮ menu opens a shared SpacingPopup so the user can tune them live here.
 
   async function addToLibrary() {
     try {
@@ -590,6 +595,7 @@ function SongView({ song, playlist, store, onBack,
           { label: 'Edit song', icon: 'edit', onSelect: onEdit },
           { label: 'Share', icon: 'share2', onSelect: openShare },
           { label: 'Add to playlist', icon: 'list', onSelect: openAddToPlaylist },
+          ...(setGaps ? [{ label: 'Adjust spacing', icon: 'spacing', onSelect: () => setSpacingOpen(true) }] : []),
           ...(playlist ? [
             { label: 'Add to library', icon: 'plus', onSelect: addToLibrary },
             { sep: true },
@@ -752,6 +758,9 @@ function SongView({ song, playlist, store, onBack,
           </div>
         </>
       )}
+
+      {/* Edge-spacing adjuster — shared popup; live preview as you drag */}
+      <SpacingPopup open={spacingOpen} onClose={() => setSpacingOpen(false)} gaps={gaps} setGaps={setGaps} />
 
       {/* When pinned to the top, the bar sits below the header/meta bars while
           they're visible, and rises to the top once they hide on autoscroll. */}

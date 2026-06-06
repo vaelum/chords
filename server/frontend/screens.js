@@ -1226,6 +1226,14 @@ function SettingsScreen({
       });
     }
   }
+
+  // Device-only app-wide edge gaps. Same store as the song-view ⋮ overlay; both
+  // open the shared SpacingPopup.
+  const gaps = tweaks.gaps || {
+    top: 0,
+    bottom: 0
+  };
+  const [spacingOpen, setSpacingOpen] = useStateS(false);
   return /*#__PURE__*/React.createElement("div", {
     className: "page",
     style: {
@@ -1440,6 +1448,28 @@ function SettingsScreen({
     name: "plus",
     size: 14
   }))))), /*#__PURE__*/React.createElement("div", {
+    className: "settings-section"
+  }, /*#__PURE__*/React.createElement("h2", null, "Display"), /*#__PURE__*/React.createElement("div", {
+    className: "settings-row"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "grow"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "row-title"
+  }, "Edge spacing"), /*#__PURE__*/React.createElement("div", {
+    className: "row-desc"
+  }, "Add empty space at the top and bottom of every screen \u2014 handy to clear device edges, notches, or system bars. Saved on this device only; also tunable live from the \u22EE menu while viewing a song.")), /*#__PURE__*/React.createElement(Btn, {
+    variant: "outline",
+    size: "sm",
+    onClick: () => setSpacingOpen(true)
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "spacing",
+    size: 14
+  }), " ", gaps.top || 0, "/", gaps.bottom || 0, " \xB7 Adjust"))), /*#__PURE__*/React.createElement(SpacingPopup, {
+    open: spacingOpen,
+    onClose: () => setSpacingOpen(false),
+    gaps: gaps,
+    setGaps: g => setTweak('gaps', g)
+  }), /*#__PURE__*/React.createElement("div", {
     className: "settings-section"
   }, /*#__PURE__*/React.createElement("h2", null, "Import & export"), /*#__PURE__*/React.createElement("div", {
     className: "settings-row"

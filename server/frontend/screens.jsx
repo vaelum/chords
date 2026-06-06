@@ -662,6 +662,11 @@ function SettingsScreen({ store, tweaks, setTweak }) {
     }
   }
 
+  // Device-only app-wide edge gaps. Same store as the song-view ⋮ overlay; both
+  // open the shared SpacingPopup.
+  const gaps = tweaks.gaps || { top: 0, bottom: 0 };
+  const [spacingOpen, setSpacingOpen] = useStateS(false);
+
   return (
     <div className="page" style={{ maxWidth: 720 }}>
       <h2 className="section-headline">Settings</h2>
@@ -792,6 +797,22 @@ function SettingsScreen({ store, tweaks, setTweak }) {
           </div>
         )}
       </div>
+
+      <div className="settings-section">
+        <h2>Display</h2>
+        <div className="settings-row">
+          <div className="grow">
+            <div className="row-title">Edge spacing</div>
+            <div className="row-desc">Add empty space at the top and bottom of every screen — handy to clear device edges, notches, or system bars. Saved on this device only; also tunable live from the ⋮ menu while viewing a song.</div>
+          </div>
+          <Btn variant="outline" size="sm" onClick={() => setSpacingOpen(true)}>
+            <Icon name="spacing" size={14} /> {(gaps.top || 0)}/{(gaps.bottom || 0)} · Adjust
+          </Btn>
+        </div>
+      </div>
+
+      <SpacingPopup open={spacingOpen} onClose={() => setSpacingOpen(false)}
+                    gaps={gaps} setGaps={(g) => setTweak('gaps', g)} />
 
       <div className="settings-section">
         <h2>Import &amp; export</h2>
