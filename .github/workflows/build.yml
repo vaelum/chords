@@ -99,6 +99,10 @@ jobs:
         working-directory: app
         run: |
           cargo tauri android init
+          # `android init` regenerates gen/android (git-ignored) from a template
+          # that carries Tauri's placeholder launcher icon. Copy the real chords
+          # icons in before building — same step as butler.py's sync_android_icons.
+          cp -r src-tauri/icons/android/. src-tauri/gen/android/app/src/main/res/
           cargo tauri android build --apk
 
       # Tauri's release APK is unsigned, and Android won't install an unsigned
@@ -120,10 +124,13 @@ jobs:
           keystore="$RUNNER_TEMP/chords.jks"
           echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$keystore"
           bt="$ANDROID_HOME/build-tools/34.0.0"
+          # Name the artifact chords-<label>.apk: the git tag on a tag build,
+          # else a UTC datetime stamp. Mirrors butler.py's _release_label().
+          if [ "$GITHUB_REF_TYPE" = tag ]; then label="$GITHUB_REF_NAME"; else label="$(date -u +%Y%m%d-%H%M%S)"; fi
           shopt -s globstar nullglob
           for apk in app/src-tauri/gen/android/app/build/outputs/apk/**/*-release-unsigned.apk; do
             aligned="${apk/-unsigned/-aligned}"
-            signed="${apk/-release-unsigned/-release}"
+            signed="$(dirname "$apk")/chords-${label}.apk"
             "$bt/zipalign" -p -f 4 "$apk" "$aligned"
             "$bt/apksigner" sign \
               --ks "$keystore" \

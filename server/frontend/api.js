@@ -13,7 +13,13 @@ function getServer() {
   return localStorage.getItem(SERVER_KEY) || '';
 }
 function setServer(url) {
-  const v = (url || '').trim().replace(/\/+$/, '');
+  let v = (url || '').trim().replace(/\/+$/, '');
+  // A bare host with no scheme (e.g. "chords.example.com") would otherwise be
+  // treated as a path relative to the app's own origin, so every request falls
+  // through to the bundled UI and comes back as HTML — JSON.parse then throws
+  // the cryptic "Unexpected token '<'". Default to https when no scheme given;
+  // an explicit http:// (local dev server) is left as-is.
+  if (v && !/^https?:\/\//i.test(v)) v = 'https://' + v;
   if (v) localStorage.setItem(SERVER_KEY, v);
   else localStorage.removeItem(SERVER_KEY);
   return v;
@@ -47,13 +53,35 @@ async function api(path, opts = {}) {
     body: opts.body != null ? JSON.stringify(opts.body) : undefined,
   });
   if (!res.ok) {
-    const payload = await res.json().catch(() => ({}));
-    const e = new Error(payload.detail || res.statusText);
+    const text = await res.text().catch(() => '');
+    let detail = res.statusText;
+    try { detail = JSON.parse(text).detail || detail; }
+    catch (e) { if (/^\s*</.test(text)) detail = 'check the server address (got a web page, not API data)'; }
+    const e = new Error(detail);
     e.status = res.status;
     throw e;
   }
   if (res.status === 204) return null;
-  return res.json();
+  return jsonOrThrow(res);
+}
+
+// Parse a successful response as JSON, turning the native runtime's confusing
+// "Unexpected token '<'" (what JSON.parse throws on an HTML page) into a clear
+// message. Getting a web page back almost always means the server URL is wrong:
+// the request fell through to a website or the app's own bundled UI, not the API.
+async function jsonOrThrow(res) {
+  const text = await res.text();
+  try {
+    return text ? JSON.parse(text) : null;
+  } catch (e) {
+    const looksHtml = /^\s*</.test(text) ||
+      (res.headers.get('content-type') || '').includes('html');
+    const err = new Error(looksHtml
+      ? 'Got a web page instead of API data — check the server address.'
+      : 'The server sent an invalid (non-JSON) response.');
+    err.status = res.status;
+    throw err;
+  }
 }
 
 /* NDJSON streaming helper.
