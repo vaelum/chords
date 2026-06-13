@@ -260,7 +260,7 @@ function PlaylistsScreen({ store, onOpen }) {
       ) : (
         <table className="data-table">
           <thead>
-            <tr><th>Name</th><th style={{ width: 90 }}>Songs</th><th style={{ width: 160 }}>Updated</th><th style={{ width: 44 }}></th></tr>
+            <tr><th>Name</th><th style={{ width: 90 }}>Songs</th><th style={{ width: 44 }}></th></tr>
           </thead>
           <tbody>
             {playlists.map(p => (
@@ -272,7 +272,6 @@ function PlaylistsScreen({ store, onOpen }) {
                   </div>
                 </td>
                 <td className="t-muted">{p.entries.length}</td>
-                <td className="t-muted">{relTime(p.updatedAt)}</td>
                 <td style={{ textAlign: 'right' }}>
                   <IconBtn icon="more" label="More" onClick={(e) => { e.stopPropagation(); setMenuFor({ anchor: e.currentTarget, pl: p }); }} />
                 </td>
@@ -375,7 +374,6 @@ function PlaylistDetail({ playlist, store, onOpenSong, onBack }) {
             {pl.shared && <Badge variant="primary"><Icon name="users" size={11} /> Shared playlist</Badge>}
             <Badge variant="outline">{entries.length} songs</Badge>
           </div>
-          <h2 style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.025em', margin: 0 }}>{pl.name}</h2>
           <div className="sub">Owned by {owner?.name}{pl.ownerId === 'u_me' ? ' (you)' : ''} · Updated {relTime(pl.updatedAt)}</div>
           {pl.shared && (
             <div className="pl-collab-row">
@@ -664,6 +662,11 @@ function SettingsScreen({ store, tweaks, setTweak }) {
     }
   }
 
+  // Device-only app-wide edge gaps. Same store as the song-view ⋮ overlay; both
+  // open the shared SpacingPopup.
+  const gaps = tweaks.gaps || { top: 0, bottom: 0 };
+  const [spacingOpen, setSpacingOpen] = useStateS(false);
+
   return (
     <div className="page" style={{ maxWidth: 720 }}>
       <h2 className="section-headline">Settings</h2>
@@ -760,6 +763,13 @@ function SettingsScreen({ store, tweaks, setTweak }) {
         </div>
         <div className="settings-row">
           <div className="grow">
+            <div className="row-title">Playback bar at top</div>
+            <div className="row-desc">Show the autoscroll controls at the top of the song view instead of the bottom.</div>
+          </div>
+          <Switch on={tweaks.barAtTop} onChange={(v) => setTweak('barAtTop', v)} />
+        </div>
+        <div className="settings-row">
+          <div className="grow">
             <div className="row-title">Metronome count-in</div>
             <div className="row-desc">Flash the playback bar at the song's tempo (BPM) before autoscroll starts.</div>
           </div>
@@ -787,6 +797,22 @@ function SettingsScreen({ store, tweaks, setTweak }) {
           </div>
         )}
       </div>
+
+      <div className="settings-section">
+        <h2>Display</h2>
+        <div className="settings-row">
+          <div className="grow">
+            <div className="row-title">Edge spacing</div>
+            <div className="row-desc">Add empty space at the top and bottom of every screen — handy to clear device edges, notches, or system bars. Saved on this device only; also tunable live from the ⋮ menu while viewing a song.</div>
+          </div>
+          <Btn variant="outline" size="sm" onClick={() => setSpacingOpen(true)}>
+            <Icon name="spacing" size={14} /> {(gaps.top || 0)}/{(gaps.bottom || 0)} · Adjust
+          </Btn>
+        </div>
+      </div>
+
+      <SpacingPopup open={spacingOpen} onClose={() => setSpacingOpen(false)}
+                    gaps={gaps} setGaps={(g) => setTweak('gaps', g)} />
 
       <div className="settings-section">
         <h2>Import &amp; export</h2>

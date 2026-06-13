@@ -5,6 +5,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 # Send our own diagnostic logs (import timing, browser phases) to stdout at INFO
@@ -28,8 +29,31 @@ from .routers.invites import router as invites_router
 from .routers.transfer import router as transfer_router
 from .routers.events import router as events_router
 from .routers.public import router as public_router
+from .version import BUILD_ID
 
 FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
+
+# index.html with this build's id injected, rendered once at import (BUILD_ID is
+# constant for the life of the process). The client reads window.__BUILD_ID__ to
+# learn which build it loaded, then compares it against the id the /events stream
+# reports on (re)connect — a mismatch after a deploy triggers the reload prompt.
+#
+# The same id also stamps every asset URL: index.html ships with a literal
+# `?v=__ASSET_VERSION__` placeholder, which we swap for BUILD_ID here. Because the
+# id is the content hash of the served assets, any change to a .js/.css yields a
+# new query string on the next process start, so browsers fetch the new bytes
+# instead of a stale cache — no manual version bumping. (The placeholder is hashed
+# in version.py, so it stays stable and doesn't depend on its own substitution.)
+_INDEX_HTML = (
+    (FRONTEND_DIR / "index.html")
+    .read_text(encoding="utf-8")
+    .replace("__ASSET_VERSION__", BUILD_ID)
+    .replace(
+        "</head>",
+        f'  <script>window.__BUILD_ID__ = "{BUILD_ID}";</script>\n</head>',
+        1,
+    )
+)
 
 
 @asynccontextmanager
@@ -59,6 +83,21 @@ app.include_router(invites_router, prefix="/api")
 app.include_router(transfer_router, prefix="/api")
 app.include_router(events_router, prefix="/api")
 app.include_router(public_router, prefix="/api")
+
+@app.get("/api/version", include_in_schema=False)
+async def version():
+    """Current build id, so a client can detect when the server has newer assets
+    than the page it loaded."""
+    return {"build": BUILD_ID}
+
+
+# Serve the entry HTML through our own handler so the build id is injected. Must
+# be registered before the catch-all static mount below (routes match in order).
+@app.get("/", include_in_schema=False)
+@app.get("/index.html", include_in_schema=False)
+async def index():
+    return HTMLResponse(_INDEX_HTML)
+
 
 # Serve the frontend — must be last so API routes take priority
 app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")

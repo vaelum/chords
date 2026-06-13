@@ -317,6 +317,89 @@ function relTime(t) {
     day: 'numeric'
   });
 }
+
+// Device-only edge-spacing adjuster. Shared by Settings and the song-view ⋮
+// menu. Uses a transparent backdrop (not a dimming scrim) so the live padding
+// change at the screen edges stays visible as you drag the sliders.
+function SpacingPopup({
+  open,
+  onClose,
+  gaps,
+  setGaps
+}) {
+  if (!open) return null;
+  const g = gaps || {
+    top: 0,
+    bottom: 0
+  };
+  const set = (k, v) => setGaps && setGaps({
+    ...g,
+    [k]: Math.max(0, Math.min(200, v | 0))
+  });
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'fixed',
+      inset: 0,
+      zIndex: 49
+    },
+    onClick: onClose
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "sv-center-popup",
+    style: {
+      minWidth: 300,
+      maxWidth: 360
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "sv-center-popup-head"
+  }, /*#__PURE__*/React.createElement("span", null, "Edge spacing"), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-ghost btn-icon btn-sm",
+    onClick: onClose
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "close",
+    size: 14
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 16
+    }
+  }, [['top', 'Top'], ['bottom', 'Bottom']].map(([k, label]) => /*#__PURE__*/React.createElement("div", {
+    key: k
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      fontSize: 13,
+      fontWeight: 600,
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement("span", null, label), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: 'var(--font-mono)',
+      color: 'var(--muted-foreground)'
+    }
+  }, g[k] || 0, "px")), /*#__PURE__*/React.createElement("input", {
+    type: "range",
+    className: "gap-slider",
+    min: "0",
+    max: "200",
+    step: "2",
+    value: g[k] || 0,
+    onChange: e => set(k, parseInt(e.target.value, 10)),
+    "aria-label": `${label} spacing`
+  })))), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-ghost btn-sm",
+    style: {
+      marginTop: 18,
+      width: '100%'
+    },
+    onClick: () => setGaps && setGaps({
+      ...g,
+      top: 0,
+      bottom: 0
+    })
+  }, "Reset")));
+}
 Object.assign(window, {
   Btn,
   IconBtn,
@@ -328,6 +411,7 @@ Object.assign(window, {
   Sheet,
   Menu,
   useMenu,
+  SpacingPopup,
   ToastProvider,
   useToast,
   Avatar,
