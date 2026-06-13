@@ -1,7 +1,24 @@
 FROM python:3.12-slim
 
-# Install Node.js (needed by the Claude Code CLI) and curl for NodeSource setup
-RUN apt-get update \
+# Optional fast Debian mirror for the apt steps below — e.g. Hetzner's internal
+# "mirror.hetzner.com" when building on a Hetzner host (much faster + free, but
+# only reachable from Hetzner IPs). Empty by default so builds work anywhere; the
+# rewrite persists in the image so the later `playwright --with-deps` apt also
+# uses it. trixie ships the deb822 sources file; older images use sources.list.
+ARG APT_MIRROR=
+
+# Install Node.js (needed by the Claude Code CLI) and curl for NodeSource setup.
+RUN if [ -n "$APT_MIRROR" ]; then \
+      for f in /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources; do \
+        if [ -f "$f" ]; then \
+          sed -i \
+            -e "s|http://deb.debian.org/debian-security|http://${APT_MIRROR}/debian/security|g" \
+            -e "s|http://deb.debian.org/debian|http://${APT_MIRROR}/debian/packages|g" \
+            "$f"; \
+        fi; \
+      done; \
+    fi \
+ && apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates gnupg \
  && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
  && apt-get install -y --no-install-recommends nodejs \

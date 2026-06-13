@@ -4,6 +4,10 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+      args:
+        # Fast Debian mirror for the image build; empty = default Debian CDN.
+        # deploy.sh sets this to Hetzner's internal mirror on the remote.
+        APT_MIRROR: ${APT_MIRROR:-}
     volumes:
       - ${HOME}/.chords:/chords-data
       # Forward the host's Claude Code login so the agent SDK can authenticate.
