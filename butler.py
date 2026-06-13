@@ -15,7 +15,8 @@ Components & actions:
   app       dev        Run the Tauri desktop app with hot reload
             build      Build desktop bundles for THIS OS (--debug, --bundles ...)
             icon       Regenerate app icons from the 1024px source art
-            android    <init|dev|build>   Android (needs the SDK/NDK toolchain)
+            android    <init|dev|build|keygen>   Android (needs the SDK/NDK toolchain)
+                       build [--debug] [--no-sign]; keygen creates a signing key
 
   extension package    Zip the browser extension into dist/ for distribution
 
@@ -24,7 +25,9 @@ Examples:
     python butler.py server deploy
     python butler.py app dev
     python butler.py app build --bundles deb appimage
-    python butler.py app android build
+    python butler.py app android keygen          # one-time: signing key for release APKs
+    python butler.py app android build           # signed release APK -> dist/
+    python butler.py app android build --debug   # debug APK (auto-signed), quick sideload
     python butler.py extension package
 """
 
@@ -42,6 +45,19 @@ SERVER = ROOT / "server"
 APP = ROOT / "app"
 EXT = ROOT / "extension"
 DIST = ROOT / "dist"
+
+# Android toolchain version pinned to match CI (.github/workflows/build.yml), so a
+# local build mirrors the released APK. Install it with:
+#   sdkmanager "ndk;26.3.11579264" "platforms;android-34" "build-tools;34.0.0"
+CI_NDK_VERSION = "26.3.11579264"
+
+# Local Android signing material (git-ignored). The generated gen/android project
+# stays regenerable — we sign the built release APK as a post-build step instead of
+# editing the generated Gradle files. CI ships an *unsigned* release APK; signing
+# here is what makes the local APK sideloadable.
+ANDROID_DIR = APP / ".android"
+KEYSTORE = ANDROID_DIR / "chords.jks"
+KEYSTORE_PROPS = ANDROID_DIR / "keystore.properties"
 
 
 def run(cmd, cwd, extra_env=None):
@@ -138,10 +154,15 @@ def android_env():
     sdk = Path(env.get("ANDROID_HOME") or os.environ.get("ANDROID_HOME")
                or os.environ.get("ANDROID_SDK_ROOT") or (home / "Android" / "Sdk"))
     if not os.environ.get("NDK_HOME"):
+        # Prefer the exact NDK version CI uses; otherwise fall back to the newest
+        # one installed (sdkmanager under $ANDROID_HOME/ndk, or the Arch AUR path).
+        pinned = sdk / "ndk" / CI_NDK_VERSION
         cands = sorted(p for p in (sdk / "ndk").iterdir() if p.is_dir()) if (sdk / "ndk").is_dir() else []
         if Path("/opt/android-ndk").is_dir():
             cands.append(Path("/opt/android-ndk"))
-        if cands:
+        if pinned.is_dir():
+            env["NDK_HOME"] = str(pinned)
+        elif cands:
             env["NDK_HOME"] = str(cands[-1])
 
     if not os.environ.get("JAVA_HOME"):
@@ -181,13 +202,134 @@ def app_icon(_args):
     return run(["cargo", "tauri", "icon", str(src)], cwd=APP / "src-tauri")
 
 
-def app_android(args):
-    if args.action == "build":
-        rc = run(["cargo", "tauri", "android", "build", "--apk"], cwd=APP, extra_env=android_env())
-        if rc == 0:
-            collect_to_dist([APP / "src-tauri" / "gen" / "android" / "app" / "build" / "outputs"])
+def _java_home(env):
+    return (env or {}).get("JAVA_HOME") or os.environ.get("JAVA_HOME")
+
+
+def _build_tools_dir(env):
+    """Newest $ANDROID_HOME/build-tools/<ver> dir (holds apksigner / zipalign)."""
+    sdk = (env or {}).get("ANDROID_HOME") or os.environ.get("ANDROID_HOME") \
+        or os.environ.get("ANDROID_SDK_ROOT")
+    bt = Path(sdk) / "build-tools" if sdk else None
+    if not bt or not bt.is_dir():
+        return None
+    versions = sorted((p for p in bt.iterdir() if p.is_dir()), key=lambda p: p.name)
+    return versions[-1] if versions else None
+
+
+def _read_keystore_props():
+    """Signing config from app/.android/keystore.properties; env vars override.
+    Returns a dict with all four keys, or None if anything is missing."""
+    props = {}
+    if KEYSTORE_PROPS.is_file():
+        for line in KEYSTORE_PROPS.read_text().splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                props[k.strip()] = v.strip()
+    overrides = {
+        "storeFile": os.environ.get("CHORDS_ANDROID_KEYSTORE"),
+        "storePassword": os.environ.get("CHORDS_ANDROID_KS_PASS"),
+        "keyAlias": os.environ.get("CHORDS_ANDROID_KEY_ALIAS"),
+        "keyPassword": os.environ.get("CHORDS_ANDROID_KEY_PASS"),
+    }
+    props.update({k: v for k, v in overrides.items() if v})
+    if all(props.get(k) for k in ("storeFile", "storePassword", "keyAlias", "keyPassword")):
+        return props
+    return None
+
+
+def android_keygen(args, env):
+    """Create a self-signed keystore + keystore.properties for sideloadable
+    release APKs. Self-signed is fine for sideloading (not for the Play Store)."""
+    if KEYSTORE.exists():
+        print(f"\033[1;33mkeystore already exists:\033[0m {KEYSTORE.relative_to(ROOT)} "
+              "(delete it to regenerate)")
+        return 1
+    java_home = _java_home(env)
+    keytool = str(Path(java_home) / "bin" / "keytool") if java_home else "keytool"
+    import secrets
+    password = args.password or secrets.token_urlsafe(18)
+    alias = "chords"
+    ANDROID_DIR.mkdir(parents=True, exist_ok=True)
+    rc = run([keytool, "-genkeypair", "-v",
+              "-keystore", KEYSTORE, "-alias", alias,
+              "-keyalg", "RSA", "-keysize", "2048", "-validity", "10000",
+              "-storepass", password, "-keypass", password,
+              "-dname", "CN=chords, OU=chords, O=chords, C=DE"],
+             cwd=APP, extra_env=env)
+    if rc != 0:
         return rc
-    return run(["cargo", "tauri", "android", args.action], cwd=APP, extra_env=android_env())
+    KEYSTORE_PROPS.write_text(
+        f"storeFile={KEYSTORE}\nstorePassword={password}\nkeyAlias={alias}\nkeyPassword={password}\n")
+    print(f"\n\033[1;32mwrote\033[0m {KEYSTORE.relative_to(ROOT)} + keystore.properties (git-ignored).")
+    print("Back this keystore up — you need the same key to ship in-place upgrades.")
+    return 0
+
+
+def _sign_release_apks(outputs, env):
+    """zipalign + apksigner every *-release-unsigned.apk under `outputs`, writing a
+    signed *-release.apk next to each. Returns the signed paths (empty if it can't)."""
+    props = _read_keystore_props()
+    if not props:
+        print("\n\033[1;33mnote:\033[0m no keystore — release APK is UNSIGNED and can't be "
+              "sideloaded.\n      Run 'python butler.py app android keygen', or build with "
+              "'--debug' for an auto-signed APK.")
+        return []
+    bt = _build_tools_dir(env)
+    if not bt:
+        print("\n\033[1;31merror:\033[0m build-tools not found (need ANDROID_HOME); cannot sign.",
+              file=sys.stderr)
+        return []
+    signed = []
+    for unsigned in sorted(outputs.rglob("*-release-unsigned.apk")):
+        aligned = unsigned.with_name(unsigned.name.replace("-unsigned", "-aligned"))
+        out = unsigned.with_name(unsigned.name.replace("-release-unsigned", "-release"))
+        if run([bt / "zipalign", "-p", "-f", "4", unsigned, aligned], cwd=APP, extra_env=env) != 0:
+            continue
+        rc = run([bt / "apksigner", "sign",
+                  "--ks", props["storeFile"],
+                  "--ks-key-alias", props["keyAlias"],
+                  "--ks-pass", "pass:" + props["storePassword"],
+                  "--key-pass", "pass:" + props["keyPassword"],
+                  "--out", out, aligned], cwd=APP, extra_env=env)
+        aligned.unlink(missing_ok=True)
+        if rc == 0:
+            signed.append(out)
+    return signed
+
+
+def app_android(args):
+    env = android_env()
+    if args.action == "keygen":
+        return android_keygen(args, env)
+    if args.action != "build":
+        return run(["cargo", "tauri", "android", args.action], cwd=APP, extra_env=env)
+
+    cmd = ["cargo", "tauri", "android", "build", "--apk"]
+    if args.debug:
+        cmd.append("--debug")
+    rc = run(cmd, cwd=APP, extra_env=env)
+    if rc != 0:
+        return rc
+
+    outputs = APP / "src-tauri" / "gen" / "android" / "app" / "build" / "outputs"
+    # Debug APKs are already signed with the Android debug key (instantly
+    # sideloadable). Release APKs come out unsigned, so sign them here.
+    if args.debug or args.no_sign:
+        collect_to_dist([outputs])
+        return rc
+    signed = _sign_release_apks(outputs, env)
+    if signed:
+        DIST.mkdir(exist_ok=True)
+        print("\n\033[1;32msigned & copied to dist/\033[0m")
+        for p in signed:
+            dest = DIST / p.name
+            shutil.copy2(p, dest)
+            print(f"  {dest.relative_to(ROOT)}  ({dest.stat().st_size:,} bytes)")
+    else:
+        collect_to_dist([outputs])  # nothing signed — leave the unsigned APK in dist/
+    return rc
 
 
 # --------------------------------------------------------------------------- #
@@ -236,8 +378,13 @@ def build_parser():
     b.add_argument("--bundles", nargs="*", metavar="KIND", help="e.g. deb appimage rpm nsis msi dmg")
     b.set_defaults(func=app_build)
     ap.add_parser("icon", help="regenerate icons").set_defaults(func=app_icon)
-    a_andro = ap.add_parser("android", help="Android <init|dev|build>")
-    a_andro.add_argument("action", choices=["init", "dev", "build"])
+    a_andro = ap.add_parser("android", help="Android <init|dev|build|keygen>")
+    a_andro.add_argument("action", choices=["init", "dev", "build", "keygen"])
+    a_andro.add_argument("--debug", action="store_true",
+                         help="build: debug profile (auto-signed, instantly sideloadable)")
+    a_andro.add_argument("--no-sign", action="store_true",
+                         help="build: skip signing the release APK (leaves it unsigned)")
+    a_andro.add_argument("--password", help="keygen: keystore password (default: random)")
     a_andro.set_defaults(func=app_android)
 
     # extension

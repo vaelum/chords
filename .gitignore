@@ -9,5 +9,7 @@ app/src-tauri/target/
 app/src-tauri/gen/
 # Untracked, machine-local server URL override (never commit a server address)
 app/server.local*
+# Android signing material (keystore + passwords) — never commit
+app/.android/
 # butler.py build artifacts (extension zips, etc.)
 dist/
