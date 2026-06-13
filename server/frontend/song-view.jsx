@@ -82,7 +82,8 @@ function shiftKey(key, steps) {
 
 function SongView({ song, playlist, store, onBack,
                     openShare, openAddToPlaylist, onEdit, onPrev, onNext,
-                    lyricSize, setLyricSize, keepAwake, chordColor = 'orange',
+                    lyricSize, setLyricSize, sideSpace = 0, setSideSpace = null,
+                    keepAwake, chordColor = 'orange',
                     metronome = false, metronomeBeats = 4, barAtTop = false, readOnly = false,
                     gaps = { top: 0, bottom: 0 }, setGaps = null }) {
   const [speed, setSpeed] = useStateSV(song.scrollSpeed || 1.0);
@@ -378,6 +379,24 @@ function SongView({ song, playlist, store, onBack,
     return () => window.removeEventListener('keydown', h);
   }, [onBack, song.key, song.body, autoscroll]);
 
+  // Bottom-bar popovers (Sections, scroll mode, Text size) dismiss on a click or
+  // tap outside them — the centred Key/Capo/Tempo popups already do this via an
+  // overlay, these are anchored to the bar so we test the target instead. A
+  // toggle button and its popover card both live inside the same .popover-anchor,
+  // so pressing a button (to close/switch) or dragging the size slider counts as
+  // "inside" and is left to the element's own handler.
+  useEffectSV(() => {
+    if (!sectionsOpen && !modePopOpen && !fontPopOpen) return;
+    const onDown = (e) => {
+      if (e.target.closest && e.target.closest('.popover-anchor')) return;
+      setSectionsOpen(false);
+      setModePopOpen(false);
+      setFontPopOpen(false);
+    };
+    document.addEventListener('pointerdown', onDown);
+    return () => document.removeEventListener('pointerdown', onDown);
+  }, [sectionsOpen, modePopOpen, fontPopOpen]);
+
   function toggleAutoscroll() {
     if (!autoscroll) {
       setModePopOpen(false);
@@ -561,6 +580,17 @@ function SongView({ song, playlist, store, onBack,
                             onClick={() => setLyricSize(s)}>{s}</button>
                   ))}
                 </div>
+                {setSideSpace && (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                  margin: '16px 0 10px' }}>
+                      <span className="t-small">Side margins</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--muted-foreground)' }}>{sideSpace}px</span>
+                    </div>
+                    <input type="range" className="as-slider" min="0" max="80" step="2"
+                           value={sideSpace} onChange={(e) => setSideSpace(+e.target.value)} />
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -766,7 +796,7 @@ function SongView({ song, playlist, store, onBack,
           they're visible, and rises to the top once they hide on autoscroll. */}
       {barAtTop && autoscrollBar}
 
-      <div className="sv-scroll" ref={scrollRef}>
+      <div className="sv-scroll" ref={scrollRef} style={{ '--side-space': sideSpace + 'px' }}>
         <SongBody lines={parsedLines} lyricSize={lyricSize} contentRef={contentRef} />
       </div>
 

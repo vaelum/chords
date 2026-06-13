@@ -648,6 +648,7 @@ const DEFAULTS = /*EDITMODE-BEGIN*/{
   "palette": "zinc",
   "mode": "dark",
   "lyricSize": 16,
+  "sideSpace": 0,
   "keepAwake": true,
   "chordColor": "orange",
   "metronome": false,
@@ -664,6 +665,18 @@ function loadLyricSize() {
     if (!isNaN(v) && v >= 12 && v <= 32) return v;
   } catch (e) {}
   return DEFAULTS.lyricSize;
+}
+
+// Empty margin (px) added to the left and right of the song-view text, on top
+// of the base edge padding. Per-device preference, persisted client-side.
+const SIDE_SPACE_KEY = 'chords.sideSpace';
+const SIDE_SPACE_MAX = 80;
+function loadSideSpace() {
+  try {
+    const v = parseInt(localStorage.getItem(SIDE_SPACE_KEY), 10);
+    if (!isNaN(v) && v >= 0 && v <= SIDE_SPACE_MAX) return v;
+  } catch (e) {}
+  return DEFAULTS.sideSpace;
 }
 
 // Chord chip color in song view — 'orange' (brand accent) or 'grey' (neutral,
@@ -749,6 +762,10 @@ function PublicPlaylistView({ token, tweaks, setTweaks }) {
     setTweaks(t => ({ ...t, lyricSize: n }));
     try { localStorage.setItem(LYRIC_SIZE_KEY, String(n)); } catch (e) {}
   };
+  const setSideSpace = (n) => {
+    setTweaks(t => ({ ...t, sideSpace: n }));
+    try { localStorage.setItem(SIDE_SPACE_KEY, String(n)); } catch (e) {}
+  };
   const toggleMode = () => setTweaks(t => ({ ...t, mode: t.mode === 'dark' ? 'light' : 'dark' }));
 
   // Edge gaps apply to the public (shared-link) views too — handled at the root
@@ -795,6 +812,8 @@ function PublicPlaylistView({ token, tweaks, setTweaks }) {
                 onNext={nextId ? () => setOpenId(nextId) : null}
                 lyricSize={tweaks.lyricSize}
                 setLyricSize={setLyricSize}
+                sideSpace={tweaks.sideSpace}
+                setSideSpace={setSideSpace}
                 keepAwake={tweaks.keepAwake}
                 chordColor={tweaks.chordColor}
                 metronome={tweaks.metronome}
@@ -851,10 +870,25 @@ function PublicPlaylistView({ token, tweaks, setTweaks }) {
   );
 }
 
+// Measure a CSS env(safe-area-inset-<side>) in px. There's no way to read env()
+// straight from JS, so resolve it on a hidden fixed-position probe whose height
+// is the inset, then read it back. Returns 0 where there's no inset (desktop, or
+// a webview without viewport-fit=cover). side is 'top' | 'bottom' | 'left' | 'right'.
+function readSafeAreaInset(side) {
+  const probe = document.createElement('div');
+  probe.style.cssText =
+    'position:fixed;left:0;top:0;width:0;visibility:hidden;pointer-events:none;' +
+    'height:env(safe-area-inset-' + side + ', 0px);';
+  document.body.appendChild(probe);
+  const px = parseFloat(getComputedStyle(probe).height) || 0;
+  probe.remove();
+  return px;
+}
+
 // ---------- main App ----------
 function App() {
   const store = useStore();
-  const [tweaks, setTweaks] = useStateA(() => ({ ...DEFAULTS, lyricSize: loadLyricSize(), chordColor: loadChordColor(), metronome: loadMetronome(), metronomeBeats: loadMetronomeBeats(), barAtTop: loadBarAtTop(), gaps: loadGaps() }));
+  const [tweaks, setTweaks] = useStateA(() => ({ ...DEFAULTS, lyricSize: loadLyricSize(), sideSpace: loadSideSpace(), chordColor: loadChordColor(), metronome: loadMetronome(), metronomeBeats: loadMetronomeBeats(), barAtTop: loadBarAtTop(), gaps: loadGaps() }));
 
   const params = new URLSearchParams(window.location.search);
   const inviteToken = params.get('invite');
@@ -872,39 +906,55 @@ function App() {
   // versions, split-view, and the toolbar show/hide transition. visualViewport
   // reports the real visible height; CSS falls back to 100dvh/100vh before this
   // runs. scroll fires too because hiding the toolbar changes the visible height.
-  // Device-only edge gaps (top/bottom). Applied here, at the root, so every view
-  // is inset: padding goes on the #app element (a plain block — padding never
-  // collapses and nothing gets clipped), and the same amount is subtracted from
-  // --app-height so the fixed-height shell (and its bottom play bar) shrink to
-  // fit the remaining space instead of being pushed off-screen.
+  // Keep the whole app clear of the OS bars on edge-to-edge mobile webviews
+  // (viewport-fit=cover): the status bar up top, the gesture/nav bar (Android)
+  // or home indicator (iOS) at the bottom. The device safe-area insets are the
+  // base inset; any user "edge gap" tweak is added on top. Padding goes on the
+  // #app element (a plain block — padding never collapses, nothing gets clipped)
+  // and the same amount is subtracted from --app-height, so the fixed-height
+  // shell (and its bottom play bar) shrink to fit the remaining space instead of
+  // being pushed under a bar. Doing it once here means individual bars don't
+  // each need their own env(safe-area-inset-*) padding.
   const gapTop = (tweaks.gaps && tweaks.gaps.top) || 0;
   const gapBottom = (tweaks.gaps && tweaks.gaps.bottom) || 0;
   useEffectA(() => {
     const vv = window.visualViewport;
     const root = document.getElementById('app');
-    if (root) {
-      root.style.paddingTop = gapTop + 'px';
-      root.style.paddingBottom = gapBottom + 'px';
-    }
+    let insetTop = 0, insetBottom = 0;
+    // env(safe-area-inset-*) can't be read directly in JS, and we need the px
+    // value to subtract from --app-height — so measure it off a throwaway probe.
+    // Re-measured on resize/orientation since the insets differ per orientation.
+    const applyInsets = () => {
+      insetTop = readSafeAreaInset('top');
+      insetBottom = readSafeAreaInset('bottom');
+      if (root) {
+        root.style.paddingTop = (insetTop + gapTop) + 'px';
+        root.style.paddingBottom = (insetBottom + gapBottom) + 'px';
+      }
+    };
     const setH = () => {
       const visible = (vv && vv.height) || window.innerHeight;
-      const h = Math.max(0, visible - gapTop - gapBottom);
+      const h = Math.max(0, visible - insetTop - insetBottom - gapTop - gapBottom);
       document.documentElement.style.setProperty('--app-height', h + 'px');
     };
+    const onResize = () => { applyInsets(); setH(); };
+    applyInsets();
     setH();
     if (vv) {
-      vv.addEventListener('resize', setH);
+      // visualViewport 'scroll' (iOS toolbar show/hide) only changes the height,
+      // not the insets — so it runs setH alone, skipping the probe.
+      vv.addEventListener('resize', onResize);
       vv.addEventListener('scroll', setH);
     }
-    window.addEventListener('resize', setH);
-    window.addEventListener('orientationchange', setH);
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
     return () => {
       if (vv) {
-        vv.removeEventListener('resize', setH);
+        vv.removeEventListener('resize', onResize);
         vv.removeEventListener('scroll', setH);
       }
-      window.removeEventListener('resize', setH);
-      window.removeEventListener('orientationchange', setH);
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onResize);
     };
   }, [gapTop, gapBottom]);
 
@@ -980,6 +1030,10 @@ function AppShell({ store, tweaks, setTweaks }) {
     if ('lyricSize' in edits) {
       try { localStorage.setItem(LYRIC_SIZE_KEY, String(edits.lyricSize)); } catch (e) {}
     }
+    // Side margins are likewise a per-device song-view preference.
+    if ('sideSpace' in edits) {
+      try { localStorage.setItem(SIDE_SPACE_KEY, String(edits.sideSpace)); } catch (e) {}
+    }
     // Chord color is likewise a per-device preference.
     if ('chordColor' in edits) {
       try { localStorage.setItem(CHORD_COLOR_KEY, String(edits.chordColor)); } catch (e) {}
@@ -1003,7 +1057,7 @@ function AppShell({ store, tweaks, setTweaks }) {
   // wire up store action handlers
   const storeWithActions = useMemoA(() => ({
     ...store,
-    openEditor: (song) => setEditor({ song, isNew: false }),
+    openEditor: (song) => openEditorNav({ song, isNew: false }),
     openShareFor: (song) => setShareSong(song),
     
     openAddToPlaylist: (song) => setAddToPlaylistFor(song),
@@ -1022,10 +1076,69 @@ function AppShell({ store, tweaks, setTweaks }) {
   
   const currentPlaylist = currentPlaylistForSong;
 
-  const goLibrary = () => setRoute({ name: 'library' });
-  const goSong = (s) => setRoute({ name: 'song', songId: s.id });
-  const goSongPlaylist = (songId, playlistId) => setRoute({ name: 'song', songId, playlistId });
-  const goPlaylist = (p) => setRoute({ name: 'playlist', playlistId: p.id });
+  // ---- History-backed navigation -------------------------------------------
+  // In-app navigation is mirrored into the browser history stack so the
+  // back/forward buttons — and the Android hardware back button in the native
+  // shell — move between views. Entries are opaque (no URL changes); the nav
+  // state lives in history.state. setRoute/setEditor stay the raw setters and
+  // are called directly only by the popstate handler below. Reading the current
+  // route from history.state (not React state) keeps these closure-free of
+  // stale values, so they're safe to capture in memoised handlers.
+  const navigate = (next) => {
+    const cur = (window.history.state && window.history.state.route) || null;
+    if (cur && JSON.stringify(cur) === JSON.stringify(next)) return;  // skip dup entries (e.g. re-tapping the active nav)
+    setRoute(next);
+    window.history.pushState({ route: next, editor: null }, '');
+  };
+
+  // Open the full-screen editor as its own history step, so Back (or the native
+  // back button) closes it and returns to the view underneath.
+  const openEditorNav = (ed) => {
+    setEditor(ed);
+    const cur = (window.history.state && window.history.state.route) || { name: 'library' };
+    window.history.pushState(
+      { route: cur, editor: { songId: ed.song ? ed.song.id : null, isNew: !!ed.isNew } }, '');
+  };
+  // Every "back" affordance — the in-app back/close buttons as well as the
+  // browser/hardware Back button — pops the current history entry. The popstate
+  // handler then restores the underlying view (closing the editor if that was
+  // the popped entry), so all the back paths stay in sync and the stack never
+  // grows from a "back" press. (Forward actions like opening a song push.)
+  const goBack = () => window.history.back();
+
+  // Seed the initial entry so a Back from the home view leaves the app as
+  // expected, then restore route/editor on every back/forward.
+  useEffectA(() => {
+    window.history.replaceState({ route: { name: 'library' }, editor: null }, '');
+  }, []);
+  useEffectA(() => {
+    const onPop = (e) => {
+      const st = e.state;
+      if (!st || !st.route) { setRoute({ name: 'library' }); setEditor(null); return; }
+      setRoute(st.route);
+      const ed = st.editor;
+      if (ed && (ed.songId || ed.isNew)) {
+        // A song may be a library song or a playlist-owned copy — look in both.
+        const song = ed.songId
+          ? (store.songs.find(s => s.id === ed.songId)
+             || store.playlists.flatMap(p => p.entries).map(en => en.song).find(s => s && s.id === ed.songId)
+             || null)
+          : null;
+        // A library-edit entry we can no longer resolve (song deleted) just closes.
+        if (!ed.isNew && !song) setEditor(null);
+        else setEditor({ song, isNew: ed.isNew });
+      } else {
+        setEditor(null);
+      }
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [store.songs, store.playlists]);
+
+  const goLibrary = () => navigate({ name: 'library' });
+  const goSong = (s) => navigate({ name: 'song', songId: s.id });
+  const goSongPlaylist = (songId, playlistId) => navigate({ name: 'song', songId, playlistId });
+  const goPlaylist = (p) => navigate({ name: 'playlist', playlistId: p.id });
 
   const navItems = [
     { key: 'library',  label: 'Library',   icon: 'library' },
@@ -1057,7 +1170,7 @@ function AppShell({ store, tweaks, setTweaks }) {
           </div>
           {navItems.map(n => (
             <div key={n.key} className={`nav-item ${activeNav === n.key ? 'active' : ''}`}
-                 onClick={() => setRoute({ name: n.key })}>
+                 onClick={() => navigate({ name: n.key })}>
               <span className="icon"><Icon name={n.icon} size={16} /></span>
               <span>{n.label}</span>
               {n.count > 0 && <span className="count">{n.count}</span>}
@@ -1084,7 +1197,7 @@ function AppShell({ store, tweaks, setTweaks }) {
                 </>}
                 {route.name === 'playlists' && <h1>Playlists</h1>}
                 {route.name === 'playlist' && <>
-                  <Btn variant="ghost" size="sm" onClick={() => setRoute({ name: 'playlists' })}><Icon name="back" size={14} /></Btn>
+                  <Btn variant="ghost" size="sm" onClick={goBack}><Icon name="back" size={14} /></Btn>
                   <h1>{(store.playlists.find(p => p.id === route.playlistId) || {}).name || 'Playlist'}</h1>
                 </>}
                 {route.name === 'inbox' && <>
@@ -1112,7 +1225,7 @@ function AppShell({ store, tweaks, setTweaks }) {
             {route.name === 'library' && (
               <LibraryScreen store={storeWithActions}
                              onOpen={(song, playlistId) => playlistId ? goSongPlaylist(song.id, playlistId) : goSong(song)}
-                             onNewSong={() => setEditor({ isNew: true })} />
+                             onNewSong={() => openEditorNav({ isNew: true })} />
             )}
             {route.name === 'playlists' && (
               <PlaylistsScreen store={storeWithActions} onOpen={goPlaylist} />
@@ -1125,7 +1238,7 @@ function AppShell({ store, tweaks, setTweaks }) {
               if (!pl) return <div className="page"><Empty icon="list" title="Playlist not found" /></div>;
               return <PlaylistDetail playlist={pl} store={storeWithActions}
                                      onOpenSong={(songId) => goSongPlaylist(songId, pl.id)}
-                                     onBack={() => setRoute({ name: 'playlists' })} />;
+                                     onBack={goBack} />;
             })()}
             {route.name === 'inbox' && (
               <InboxScreen store={storeWithActions} />
@@ -1143,14 +1256,16 @@ function AppShell({ store, tweaks, setTweaks }) {
                 song={currentSong}
                 playlist={currentPlaylist}
                 store={storeWithActions}
-                onBack={() => currentPlaylist ? setRoute({ name: "playlist", playlistId: currentPlaylist.id }) : goLibrary()}
+                onBack={goBack}
                 openShare={() => setShareSong(currentSong)}
                 openAddToPlaylist={() => setAddToPlaylistFor(currentSong)}
-                onEdit={() => setEditor({ song: currentSong, isNew: false })}
+                onEdit={() => openEditorNav({ song: currentSong, isNew: false })}
                 onPrev={prevId ? () => goSongPlaylist(prevId, currentPlaylist.id) : null}
                 onNext={nextId ? () => goSongPlaylist(nextId, currentPlaylist.id) : null}
                 lyricSize={tweaks.lyricSize}
                 setLyricSize={(n) => setTweak("lyricSize", n)}
+                sideSpace={tweaks.sideSpace}
+                setSideSpace={(n) => setTweak("sideSpace", n)}
                 keepAwake={tweaks.keepAwake}
                 chordColor={tweaks.chordColor}
                 metronome={tweaks.metronome}
@@ -1170,7 +1285,7 @@ function AppShell({ store, tweaks, setTweaks }) {
         <nav className="bottom-nav">
           {navItems.map(n => (
             <button key={n.key} className={`bn-item ${activeNav === n.key ? 'active' : ''}`}
-                    onClick={() => setRoute({ name: n.key })}>
+                    onClick={() => navigate({ name: n.key })}>
               <Icon name={n.icon} size={20} />
               <span>{n.label}</span>
               {n.count > 0 && <span className="bn-dot"></span>}
@@ -1184,8 +1299,8 @@ function AppShell({ store, tweaks, setTweaks }) {
           <EditorScreen
             song={editor.song || null}
             store={storeWithActions}
-            onCancel={() => setEditor(null)}
-            onSaved={() => setEditor(null)}
+            onCancel={goBack}
+            onSaved={goBack}
           />
         </div>
       )}
@@ -1225,6 +1340,8 @@ function CHORDSTweaksPanel({ tweaks, setTweak }) {
       <TweakSection title="Song view">
         <TweakSlider label="Text size" value={tweaks.lyricSize} min={12} max={32} step={1} unit="px"
           onChange={(v) => setTweak('lyricSize', v)} />
+        <TweakSlider label="Side margins" value={tweaks.sideSpace} min={0} max={80} step={2} unit="px"
+          onChange={(v) => setTweak('sideSpace', v)} />
       </TweakSection>
     </TweaksPanel>
   );

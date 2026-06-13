@@ -116,6 +116,8 @@ function SongView({
   onNext,
   lyricSize,
   setLyricSize,
+  sideSpace = 0,
+  setSideSpace = null,
   keepAwake,
   chordColor = 'orange',
   metronome = false,
@@ -468,6 +470,24 @@ function SongView({
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, [onBack, song.key, song.body, autoscroll]);
+
+  // Bottom-bar popovers (Sections, scroll mode, Text size) dismiss on a click or
+  // tap outside them — the centred Key/Capo/Tempo popups already do this via an
+  // overlay, these are anchored to the bar so we test the target instead. A
+  // toggle button and its popover card both live inside the same .popover-anchor,
+  // so pressing a button (to close/switch) or dragging the size slider counts as
+  // "inside" and is left to the element's own handler.
+  useEffectSV(() => {
+    if (!sectionsOpen && !modePopOpen && !fontPopOpen) return;
+    const onDown = e => {
+      if (e.target.closest && e.target.closest('.popover-anchor')) return;
+      setSectionsOpen(false);
+      setModePopOpen(false);
+      setFontPopOpen(false);
+    };
+    document.addEventListener('pointerdown', onDown);
+    return () => document.removeEventListener('pointerdown', onDown);
+  }, [sectionsOpen, modePopOpen, fontPopOpen]);
   function toggleAutoscroll() {
     if (!autoscroll) {
       setModePopOpen(false);
@@ -763,7 +783,30 @@ function SongView({
       padding: 0
     },
     onClick: () => setLyricSize(s)
-  }, s)))))));
+  }, s))), setSideSpace && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      margin: '16px 0 10px'
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "t-small"
+  }, "Side margins"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: 'var(--font-mono)',
+      fontSize: 12,
+      color: 'var(--muted-foreground)'
+    }
+  }, sideSpace, "px")), /*#__PURE__*/React.createElement("input", {
+    type: "range",
+    className: "as-slider",
+    min: "0",
+    max: "80",
+    step: "2",
+    value: sideSpace,
+    onChange: e => setSideSpace(+e.target.value)
+  }))))));
   return /*#__PURE__*/React.createElement("div", {
     className: "sv-shell",
     "data-chord-color": chordColor
@@ -1069,7 +1112,10 @@ function SongView({
     setGaps: setGaps
   }), barAtTop && autoscrollBar, /*#__PURE__*/React.createElement("div", {
     className: "sv-scroll",
-    ref: scrollRef
+    ref: scrollRef,
+    style: {
+      '--side-space': sideSpace + 'px'
+    }
   }, /*#__PURE__*/React.createElement(SongBody, {
     lines: parsedLines,
     lyricSize: lyricSize,

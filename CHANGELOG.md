@@ -12,6 +12,34 @@ GitHub Release body — so keep these sections accurate before tagging.
 
 - Work in progress lands here; move it under a new version heading when tagging.
 
+## [2026.6.1]
+
+Mobile (Android) polish: the app now fits the screen and carries its own identity,
+plus a clearer first-run sign-in and a reading-comfort setting.
+
+### Added
+
+- **Song view "Side margins"**: a setting to add empty left/right space beside the
+  text, for comfortable reading and to clear curved/edge displays.
+
+### Fixed
+
+- **Android launcher icon**: the app now ships the chords logo instead of the
+  default Tauri placeholder.
+- **Android safe areas**: the song view and the rest of the app no longer hide
+  behind the status bar (top) or the gesture/navigation bar (bottom) — insets are
+  applied automatically, so the manual edge-spacing workaround is no longer needed.
+- **Mobile bottom navigation**: no longer squished, with its icons clipped, on
+  edge-to-edge screens.
+- **Sign-in errors**: a server address without `http(s)://` now defaults to https,
+  and a non-JSON/HTML response reports a helpful message instead of the cryptic
+  "Unexpected token '<'".
+
+### Changed
+
+- **Signed release APK** is now named `chords-<tag-or-date>.apk` (the git tag on a
+  tagged build, otherwise a UTC datetime), instead of the generic Tauri filename.
+
 ## [2026.6.1-beta-1]
 
 First public beta of chords — guitar tabs that follow you.

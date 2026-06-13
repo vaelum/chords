@@ -38,6 +38,7 @@ import shutil
 import subprocess
 import sys
 import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -202,6 +203,29 @@ def app_icon(_args):
     return run(["cargo", "tauri", "icon", str(src)], cwd=APP / "src-tauri")
 
 
+def sync_android_icons():
+    """Copy the real chords launcher icons into the (regenerable) gen/android tree.
+
+    `cargo tauri android init` recreates gen/android from a template that carries
+    Tauri's default placeholder launcher icon, and gen/ is git-ignored — so without
+    this the APK ships the wrong icon. The source set (tracked, produced by
+    `cargo tauri icon`) is src-tauri/icons/android/ and mirrors the res/ layout
+    exactly (mipmap-* PNGs, the mipmap-anydpi-v26 adaptive icon, and the
+    ic_launcher_background color). CI does the same copy in build.yml."""
+    src = APP / "src-tauri" / "icons" / "android"
+    dst = APP / "src-tauri" / "gen" / "android" / "app" / "src" / "main" / "res"
+    if not src.is_dir() or not dst.is_dir():
+        return
+    n = 0
+    for f in src.rglob("*"):
+        if f.is_file():
+            out = dst / f.relative_to(src)
+            out.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(f, out)
+            n += 1
+    print(f"\033[1;32msynced\033[0m {n} chords launcher-icon file(s) into gen/android/")
+
+
 def _java_home(env):
     return (env or {}).get("JAVA_HOME") or os.environ.get("JAVA_HOME")
 
@@ -267,9 +291,34 @@ def android_keygen(args, env):
     return 0
 
 
+def _release_label():
+    """Short label for naming release artifacts: the exact git tag on HEAD when
+    this is a tagged release build, else a UTC datetime stamp. CI mirrors this in
+    .github/workflows/build.yml."""
+    try:
+        r = subprocess.run(["git", "describe", "--tags", "--exact-match"],
+                           cwd=str(ROOT), capture_output=True, text=True)
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+    except Exception:
+        pass
+    return datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+
+
+def _signed_apk_name(unsigned_name, label):
+    """Tauri's `app-universal-release-unsigned.apk` -> `chords-<label>.apk`. Keeps
+    any architecture marker for split builds (e.g. `chords-arm64-v8a-<label>.apk`)
+    so multiple APKs never collide on the same name."""
+    stem = unsigned_name.replace("-release-unsigned.apk", "")
+    parts = [p for p in stem.split("-") if p not in ("app", "universal")]
+    suffix = ("-" + "-".join(parts)) if parts else ""
+    return f"chords{suffix}-{label}.apk"
+
+
 def _sign_release_apks(outputs, env):
     """zipalign + apksigner every *-release-unsigned.apk under `outputs`, writing a
-    signed *-release.apk next to each. Returns the signed paths (empty if it can't)."""
+    signed chords-<tag-or-datetime>.apk next to each. Returns the signed paths
+    (empty if it can't)."""
     props = _read_keystore_props()
     if not props:
         print("\n\033[1;33mnote:\033[0m no keystore — release APK is UNSIGNED and can't be "
@@ -281,10 +330,11 @@ def _sign_release_apks(outputs, env):
         print("\n\033[1;31merror:\033[0m build-tools not found (need ANDROID_HOME); cannot sign.",
               file=sys.stderr)
         return []
+    label = _release_label()
     signed = []
     for unsigned in sorted(outputs.rglob("*-release-unsigned.apk")):
         aligned = unsigned.with_name(unsigned.name.replace("-unsigned", "-aligned"))
-        out = unsigned.with_name(unsigned.name.replace("-release-unsigned", "-release"))
+        out = unsigned.with_name(_signed_apk_name(unsigned.name, label))
         if run([bt / "zipalign", "-p", "-f", "4", unsigned, aligned], cwd=APP, extra_env=env) != 0:
             continue
         rc = run([bt / "apksigner", "sign",
@@ -304,11 +354,17 @@ def app_android(args):
     if args.action == "keygen":
         return android_keygen(args, env)
     if args.action != "build":
-        return run(["cargo", "tauri", "android", args.action], cwd=APP, extra_env=env)
+        rc = run(["cargo", "tauri", "android", args.action], cwd=APP, extra_env=env)
+        if args.action == "init" and rc == 0:
+            sync_android_icons()  # init lays down placeholder icons; replace them
+        return rc
 
     cmd = ["cargo", "tauri", "android", "build", "--apk"]
     if args.debug:
         cmd.append("--debug")
+    # Drop the real chords launcher icons into the regenerable gen/android tree
+    # before the APK is assembled (a no-op if `android init` hasn't run yet).
+    sync_android_icons()
     rc = run(cmd, cwd=APP, extra_env=env)
     if rc != 0:
         return rc
