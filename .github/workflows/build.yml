@@ -101,6 +101,40 @@ jobs:
           cargo tauri android init
           cargo tauri android build --apk
 
+      # Tauri's release APK is unsigned, and Android won't install an unsigned
+      # APK. Sign it here (zipalign + apksigner) so the artifact is sideloadable —
+      # same flow as `butler.py app android build`. No-op (leaves the APK
+      # unsigned) when the signing secrets aren't configured, so forks still build.
+      - name: Sign Android APK
+        if: matrix.kind == 'android'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "::warning::No ANDROID_KEYSTORE_BASE64 secret set — release APK left UNSIGNED (not installable)."
+            exit 0
+          fi
+          keystore="$RUNNER_TEMP/chords.jks"
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$keystore"
+          bt="$ANDROID_HOME/build-tools/34.0.0"
+          shopt -s globstar nullglob
+          for apk in app/src-tauri/gen/android/app/build/outputs/apk/**/*-release-unsigned.apk; do
+            aligned="${apk/-unsigned/-aligned}"
+            signed="${apk/-release-unsigned/-release}"
+            "$bt/zipalign" -p -f 4 "$apk" "$aligned"
+            "$bt/apksigner" sign \
+              --ks "$keystore" \
+              --ks-key-alias "$ANDROID_KEY_ALIAS" \
+              --ks-pass "env:ANDROID_KEYSTORE_PASSWORD" \
+              --key-pass "env:ANDROID_KEY_PASSWORD" \
+              --out "$signed" "$aligned"
+            rm -f "$aligned" "$apk"   # drop the unsigned APK so only the signed one is uploaded
+            echo "signed -> $signed"
+          done
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
