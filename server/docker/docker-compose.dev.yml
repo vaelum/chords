@@ -1,7 +1,13 @@
 services:
   chords:
     container_name: chords
+    # --reload watches *.py by default; also watch the compiled frontend so a
+    # rebuild (build-frontend.js) bounces the worker, recomputes BUILD_ID, and
+    # the reconnecting SSE stream triggers the in-app "new version" reload prompt
+    # in dev — mirroring what a production deploy does. (Editing a .jsx alone
+    # does nothing until it's compiled to .js; run build-frontend.js --watch.)
     command: uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+             --reload-include '*.js' --reload-include '*.css' --reload-include '*.html'
     ports:
       - "8000:8000"
     volumes:

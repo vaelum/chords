@@ -120,7 +120,13 @@ function SongView({
   chordColor = 'orange',
   metronome = false,
   metronomeBeats = 4,
-  readOnly = false
+  barAtTop = false,
+  readOnly = false,
+  gaps = {
+    top: 0,
+    bottom: 0
+  },
+  setGaps = null
 }) {
   const [speed, setSpeed] = useStateSV(song.scrollSpeed || 1.0);
   // In read-only mode (public share link) key/capo/tempo changes are kept as
@@ -141,6 +147,7 @@ function SongView({
   const [keyPopOpen, setKeyPopOpen] = useStateSV(false);
   const [capoPopOpen, setCapoPopOpen] = useStateSV(false);
   const [tempoPopOpen, setTempoPopOpen] = useStateSV(false);
+  const [spacingOpen, setSpacingOpen] = useStateSV(false);
   const chordsListRef = useRefSV(null);
   const scrollRef = useRefSV(null);
   const contentRef = useRefSV(null);
@@ -168,6 +175,10 @@ function SongView({
   // the song's tempo. Shared by the count-in timer and the bar's flash animation.
   const beatCount = Math.min(16, Math.max(1, metronomeBeats || 4));
   const beatPeriodMs = 60000 / Math.min(300, Math.max(20, vTempo));
+
+  // Device-only edge gaps are applied app-wide at the root (see AppShell). The
+  // ⋮ menu opens a shared SpacingPopup so the user can tune them live here.
+
   async function addToLibrary() {
     try {
       await store.copySongToLibrary(song.id);
@@ -541,6 +552,218 @@ function SongView({
     setSectionsOpen(false);
   }
   const collabs = (playlist && playlist.collaborators || []).map(id => window.IT.USERS.find(u => u.id === id)).filter(Boolean);
+
+  // Popover vertical anchoring: cards open upward off a bottom bar, downward off
+  // a top bar. Spread into each popover-card so they never open off-screen.
+  const popVert = barAtTop ? {
+    top: '100%',
+    bottom: 'auto',
+    marginTop: 6,
+    marginBottom: 0
+  } : {
+    bottom: '100%'
+  };
+
+  // Playback / autoscroll bar. Rendered either at the top or bottom of the shell
+  // depending on the barAtTop preference; `at-top` flips its border + safe-area
+  // padding in CSS.
+  const autoscrollBar = /*#__PURE__*/React.createElement("div", {
+    className: `autoscroll-bar${barAtTop ? ' at-top' : ''}${autoscroll ? ' playing' : ''}${countIn ? ' metronome' : ''}`,
+    style: countIn ? {
+      '--beat-period': beatPeriodMs + 'ms',
+      '--beat-count': beatCount
+    } : undefined
+  }, /*#__PURE__*/React.createElement("div", {
+    className: `as-left${autoscroll ? ' as-hidden' : ''}`
+  }, sections.length > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "popover-anchor"
+  }, /*#__PURE__*/React.createElement("button", {
+    className: `as-icon-btn ${sectionsOpen ? 'on' : ''}`,
+    onClick: () => {
+      setSectionsOpen(v => !v);
+      setFontPopOpen(false);
+      setModePopOpen(false);
+    },
+    "aria-label": "Jump to section"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "list",
+    size: 16
+  })), sectionsOpen && /*#__PURE__*/React.createElement("div", {
+    className: "popover-card",
+    style: {
+      minWidth: 160,
+      left: 0,
+      right: 'auto',
+      ...popVert
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 600,
+      color: 'var(--muted-foreground)',
+      textTransform: 'uppercase',
+      letterSpacing: '.06em',
+      marginBottom: 6
+    }
+  }, "Sections"), sections.map((name, i) => /*#__PURE__*/React.createElement("button", {
+    key: i,
+    onClick: () => jumpToSection(i),
+    className: "section-jump-btn"
+  }, name)))), /*#__PURE__*/React.createElement("button", {
+    className: "as-icon-btn",
+    onClick: scrollToTop,
+    "aria-label": "Scroll to top"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "arrowUp",
+    size: 16
+  }))), /*#__PURE__*/React.createElement("div", {
+    className: "as-group"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "popover-anchor"
+  }, /*#__PURE__*/React.createElement("button", {
+    className: `as-icon-btn ${modePopOpen ? 'on' : ''}`,
+    onClick: () => {
+      setModePopOpen(v => !v);
+      setFontPopOpen(false);
+      setSectionsOpen(false);
+    },
+    "aria-label": "Scroll speed mode",
+    title: "Scroll speed mode"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "metronome",
+    size: 16
+  })), modePopOpen && /*#__PURE__*/React.createElement("div", {
+    className: "popover-card",
+    style: {
+      minWidth: 210,
+      left: '50%',
+      right: 'auto',
+      transform: 'translateX(-50%)',
+      ...popVert
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 600,
+      color: 'var(--muted-foreground)',
+      textTransform: 'uppercase',
+      letterSpacing: '.06em',
+      marginBottom: 8
+    }
+  }, "Scroll speed"), /*#__PURE__*/React.createElement("div", {
+    className: "seg-switch",
+    style: {
+      width: '100%',
+      marginBottom: 0
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: `seg-item ${!densityMode ? 'on' : ''}`,
+    style: {
+      flex: 1
+    },
+    onClick: () => setDensity(false)
+  }, "Constant"), /*#__PURE__*/React.createElement("button", {
+    className: `seg-item ${densityMode ? 'on' : ''}`,
+    style: {
+      flex: 1
+    },
+    onClick: () => setDensity(true)
+  }, "Adaptive")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 8,
+      fontSize: 11,
+      lineHeight: 1.4,
+      color: 'var(--muted-foreground)'
+    }
+  }, "Adaptive slows down on chord-heavy lines and speeds up on sparse ones."))), /*#__PURE__*/React.createElement("div", {
+    className: "as-divider"
+  }), /*#__PURE__*/React.createElement("button", {
+    className: "as-icon-btn",
+    onClick: () => handleSpeed(-0.1),
+    "aria-label": "Slower"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "minus",
+    size: 14
+  })), /*#__PURE__*/React.createElement("span", {
+    className: "as-speed-val"
+  }, (speed * 2).toFixed(1), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 10,
+      marginLeft: 2,
+      opacity: .6
+    }
+  }, "x")), /*#__PURE__*/React.createElement("button", {
+    className: "as-icon-btn",
+    onClick: () => handleSpeed(0.1),
+    "aria-label": "Faster"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "plus",
+    size: 14
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "as-divider"
+  }), /*#__PURE__*/React.createElement("button", {
+    className: "as-play",
+    onClick: toggleAutoscroll,
+    "aria-label": autoscroll ? 'Stop autoscroll' : 'Play autoscroll'
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: autoscroll ? 'pause' : 'play',
+    size: 16
+  }))), /*#__PURE__*/React.createElement("div", {
+    className: `as-right${autoscroll ? ' as-hidden' : ''}`
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "popover-anchor"
+  }, /*#__PURE__*/React.createElement("button", {
+    className: `as-icon-btn ${fontPopOpen ? 'on' : ''}`,
+    onClick: () => {
+      setFontPopOpen(v => !v);
+      setSectionsOpen(false);
+      setModePopOpen(false);
+    },
+    "aria-label": "Text size"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "textSize",
+    size: 18
+  })), fontPopOpen && /*#__PURE__*/React.createElement("div", {
+    className: "popover-card",
+    style: popVert
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 10
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "t-small"
+  }, "Text size"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontFamily: 'var(--font-mono)',
+      fontSize: 12,
+      color: 'var(--muted-foreground)'
+    }
+  }, lyricSize, "px")), /*#__PURE__*/React.createElement("input", {
+    type: "range",
+    className: "as-slider",
+    min: "12",
+    max: "32",
+    step: "1",
+    value: lyricSize,
+    onChange: e => setLyricSize(+e.target.value)
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 6,
+      marginTop: 12
+    }
+  }, [14, 16, 20, 24].map(s => /*#__PURE__*/React.createElement("button", {
+    key: s,
+    className: "btn btn-outline btn-sm",
+    style: {
+      flex: 1,
+      padding: 0
+    },
+    onClick: () => setLyricSize(s)
+  }, s)))))));
   return /*#__PURE__*/React.createElement("div", {
     className: "sv-shell",
     "data-chord-color": chordColor
@@ -580,7 +803,11 @@ function SongView({
       label: 'Add to playlist',
       icon: 'list',
       onSelect: openAddToPlaylist
-    }, ...(playlist ? [{
+    }, ...(setGaps ? [{
+      label: 'Adjust spacing',
+      icon: 'spacing',
+      onSelect: () => setSpacingOpen(true)
+    }] : []), ...(playlist ? [{
       label: 'Add to library',
       icon: 'plus',
       onSelect: addToLibrary
@@ -835,209 +1062,19 @@ function SongView({
       fontSize: 14,
       padding: '4px 10px'
     }
-  }, c))))), /*#__PURE__*/React.createElement("div", {
+  }, c))))), /*#__PURE__*/React.createElement(SpacingPopup, {
+    open: spacingOpen,
+    onClose: () => setSpacingOpen(false),
+    gaps: gaps,
+    setGaps: setGaps
+  }), barAtTop && autoscrollBar, /*#__PURE__*/React.createElement("div", {
     className: "sv-scroll",
     ref: scrollRef
   }, /*#__PURE__*/React.createElement(SongBody, {
     lines: parsedLines,
     lyricSize: lyricSize,
     contentRef: contentRef
-  })), /*#__PURE__*/React.createElement("div", {
-    className: `autoscroll-bar${autoscroll ? ' playing' : ''}${countIn ? ' metronome' : ''}`,
-    style: countIn ? {
-      '--beat-period': beatPeriodMs + 'ms',
-      '--beat-count': beatCount
-    } : undefined
-  }, /*#__PURE__*/React.createElement("div", {
-    className: `as-left${autoscroll ? ' as-hidden' : ''}`
-  }, sections.length > 0 && /*#__PURE__*/React.createElement("div", {
-    className: "popover-anchor"
-  }, /*#__PURE__*/React.createElement("button", {
-    className: `as-icon-btn ${sectionsOpen ? 'on' : ''}`,
-    onClick: () => {
-      setSectionsOpen(v => !v);
-      setFontPopOpen(false);
-      setModePopOpen(false);
-    },
-    "aria-label": "Jump to section"
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: "list",
-    size: 16
-  })), sectionsOpen && /*#__PURE__*/React.createElement("div", {
-    className: "popover-card",
-    style: {
-      minWidth: 160,
-      left: 0,
-      right: 'auto',
-      bottom: '100%'
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      fontWeight: 600,
-      color: 'var(--muted-foreground)',
-      textTransform: 'uppercase',
-      letterSpacing: '.06em',
-      marginBottom: 6
-    }
-  }, "Sections"), sections.map((name, i) => /*#__PURE__*/React.createElement("button", {
-    key: i,
-    onClick: () => jumpToSection(i),
-    className: "section-jump-btn"
-  }, name)))), /*#__PURE__*/React.createElement("button", {
-    className: "as-icon-btn",
-    onClick: scrollToTop,
-    "aria-label": "Scroll to top"
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: "arrowUp",
-    size: 16
-  }))), /*#__PURE__*/React.createElement("div", {
-    className: "as-group"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "popover-anchor"
-  }, /*#__PURE__*/React.createElement("button", {
-    className: `as-icon-btn ${modePopOpen ? 'on' : ''}`,
-    onClick: () => {
-      setModePopOpen(v => !v);
-      setFontPopOpen(false);
-      setSectionsOpen(false);
-    },
-    "aria-label": "Scroll speed mode",
-    title: "Scroll speed mode"
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: "metronome",
-    size: 16
-  })), modePopOpen && /*#__PURE__*/React.createElement("div", {
-    className: "popover-card",
-    style: {
-      minWidth: 210,
-      left: '50%',
-      right: 'auto',
-      transform: 'translateX(-50%)',
-      bottom: '100%'
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      fontWeight: 600,
-      color: 'var(--muted-foreground)',
-      textTransform: 'uppercase',
-      letterSpacing: '.06em',
-      marginBottom: 8
-    }
-  }, "Scroll speed"), /*#__PURE__*/React.createElement("div", {
-    className: "seg-switch",
-    style: {
-      width: '100%',
-      marginBottom: 0
-    }
-  }, /*#__PURE__*/React.createElement("button", {
-    className: `seg-item ${!densityMode ? 'on' : ''}`,
-    style: {
-      flex: 1
-    },
-    onClick: () => setDensity(false)
-  }, "Constant"), /*#__PURE__*/React.createElement("button", {
-    className: `seg-item ${densityMode ? 'on' : ''}`,
-    style: {
-      flex: 1
-    },
-    onClick: () => setDensity(true)
-  }, "Adaptive")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginTop: 8,
-      fontSize: 11,
-      lineHeight: 1.4,
-      color: 'var(--muted-foreground)'
-    }
-  }, "Adaptive slows down on chord-heavy lines and speeds up on sparse ones."))), /*#__PURE__*/React.createElement("div", {
-    className: "as-divider"
-  }), /*#__PURE__*/React.createElement("button", {
-    className: "as-icon-btn",
-    onClick: () => handleSpeed(-0.1),
-    "aria-label": "Slower"
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: "minus",
-    size: 14
-  })), /*#__PURE__*/React.createElement("span", {
-    className: "as-speed-val"
-  }, (speed * 2).toFixed(1), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 10,
-      marginLeft: 2,
-      opacity: .6
-    }
-  }, "x")), /*#__PURE__*/React.createElement("button", {
-    className: "as-icon-btn",
-    onClick: () => handleSpeed(0.1),
-    "aria-label": "Faster"
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: "plus",
-    size: 14
-  })), /*#__PURE__*/React.createElement("div", {
-    className: "as-divider"
-  }), /*#__PURE__*/React.createElement("button", {
-    className: "as-play",
-    onClick: toggleAutoscroll,
-    "aria-label": autoscroll ? 'Stop autoscroll' : 'Play autoscroll'
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: autoscroll ? 'pause' : 'play',
-    size: 16
-  }))), /*#__PURE__*/React.createElement("div", {
-    className: `as-right${autoscroll ? ' as-hidden' : ''}`
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "popover-anchor"
-  }, /*#__PURE__*/React.createElement("button", {
-    className: `as-icon-btn ${fontPopOpen ? 'on' : ''}`,
-    onClick: () => {
-      setFontPopOpen(v => !v);
-      setSectionsOpen(false);
-      setModePopOpen(false);
-    },
-    "aria-label": "Text size"
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: "textSize",
-    size: 18
-  })), fontPopOpen && /*#__PURE__*/React.createElement("div", {
-    className: "popover-card"
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 10
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "t-small"
-  }, "Text size"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontFamily: 'var(--font-mono)',
-      fontSize: 12,
-      color: 'var(--muted-foreground)'
-    }
-  }, lyricSize, "px")), /*#__PURE__*/React.createElement("input", {
-    type: "range",
-    className: "as-slider",
-    min: "12",
-    max: "32",
-    step: "1",
-    value: lyricSize,
-    onChange: e => setLyricSize(+e.target.value)
-  }), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      gap: 6,
-      marginTop: 12
-    }
-  }, [14, 16, 20, 24].map(s => /*#__PURE__*/React.createElement("button", {
-    key: s,
-    className: "btn btn-outline btn-sm",
-    style: {
-      flex: 1,
-      padding: 0
-    },
-    onClick: () => setLyricSize(s)
-  }, s))))))));
+  })), !barAtTop && autoscrollBar);
 }
 window.SongView = SongView;
 window.SongBody = SongBody;

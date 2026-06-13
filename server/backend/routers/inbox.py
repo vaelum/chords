@@ -122,7 +122,7 @@ def accept_item(
         # Other sessions: library gained a song, inbox lost an item.
         publish([current_user.id], {"type": "songs", "origin": origin})
         publish([current_user.id], {"type": "inbox", "origin": origin})
-        return {"song_id": song.id}
+        return {"songId": song.id}
 
     elif item.kind == "playlist":
         # The recipient gets their own independent copy of the playlist, with
@@ -158,7 +158,7 @@ def accept_item(
         # Other sessions: gained a playlist, inbox lost an item.
         publish([current_user.id], {"type": "playlists", "origin": origin})
         publish([current_user.id], {"type": "inbox", "origin": origin})
-        return {"playlist_id": pl.id}
+        return {"playlistId": pl.id}
 
     elif item.kind == "playlist-invite":
         # Join the existing shared playlist live as a collaborator.
@@ -180,7 +180,7 @@ def accept_item(
         # sessions gain the playlist (origin tab already added it locally).
         publish([c.user_id for c in pl.collaborators], {"type": "playlists", "origin": origin})
         publish([current_user.id], {"type": "inbox", "origin": origin})
-        return {"playlist_id": pl.id}
+        return {"playlistId": pl.id}
 
     raise HTTPException(400, "Unknown inbox item kind")
 
@@ -216,7 +216,7 @@ def replace_with_incoming(
     # Other sessions: the song changed, inbox lost an item.
     publish([current_user.id], {"type": "song", "id": song.id, "origin": origin})
     publish([current_user.id], {"type": "inbox", "origin": origin})
-    return {"song_id": song.id}
+    return {"songId": song.id}
 
 
 @router.post("/share-song", status_code=201)

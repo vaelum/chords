@@ -15,6 +15,7 @@ from ..auth import _decode_token
 from ..database import SessionLocal
 from ..events import subscribe
 from ..models import User
+from ..version import BUILD_ID
 
 router = APIRouter(prefix="/events", tags=["events"])
 
@@ -49,8 +50,11 @@ async def events(authorization: Optional[str] = Header(default=None)):
 
     async def gen():
         async with subscribe(user_id) as queue:
-            # Prime the stream so the client knows it's live.
-            yield ": connected\n\n"
+            # Prime the stream so the client knows it's live, and tell it which
+            # build this server is serving. The client compares this to the build
+            # baked into its loaded page; if they differ (it reconnected after a
+            # deploy) it prompts the user to reload. Sent on every (re)connect.
+            yield f"data: {json.dumps({'type': 'hello', 'build': BUILD_ID})}\n\n"
             while True:
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=_HEARTBEAT_SECONDS)

@@ -472,10 +472,6 @@ function PlaylistsScreen({
     }
   }, "Songs"), /*#__PURE__*/React.createElement("th", {
     style: {
-      width: 160
-    }
-  }, "Updated"), /*#__PURE__*/React.createElement("th", {
-    style: {
       width: 44
     }
   }))), /*#__PURE__*/React.createElement("tbody", null, playlists.map(p => /*#__PURE__*/React.createElement("tr", {
@@ -504,8 +500,6 @@ function PlaylistsScreen({
   }), " Shared"))), /*#__PURE__*/React.createElement("td", {
     className: "t-muted"
   }, p.entries.length), /*#__PURE__*/React.createElement("td", {
-    className: "t-muted"
-  }, relTime(p.updatedAt)), /*#__PURE__*/React.createElement("td", {
     style: {
       textAlign: 'right'
     }
@@ -682,14 +676,7 @@ function PlaylistDetail({
     size: 11
   }), " Shared playlist"), /*#__PURE__*/React.createElement(Badge, {
     variant: "outline"
-  }, entries.length, " songs")), /*#__PURE__*/React.createElement("h2", {
-    style: {
-      fontSize: 32,
-      fontWeight: 800,
-      letterSpacing: '-0.025em',
-      margin: 0
-    }
-  }, pl.name), /*#__PURE__*/React.createElement("div", {
+  }, entries.length, " songs")), /*#__PURE__*/React.createElement("div", {
     className: "sub"
   }, "Owned by ", owner?.name, pl.ownerId === 'u_me' ? ' (you)' : '', " \xB7 Updated ", relTime(pl.updatedAt)), pl.shared && /*#__PURE__*/React.createElement("div", {
     className: "pl-collab-row"
@@ -1239,6 +1226,14 @@ function SettingsScreen({
       });
     }
   }
+
+  // Device-only app-wide edge gaps. Same store as the song-view ⋮ overlay; both
+  // open the shared SpacingPopup.
+  const gaps = tweaks.gaps || {
+    top: 0,
+    bottom: 0
+  };
+  const [spacingOpen, setSpacingOpen] = useStateS(false);
   return /*#__PURE__*/React.createElement("div", {
     className: "page",
     style: {
@@ -1398,6 +1393,17 @@ function SettingsScreen({
     className: "grow"
   }, /*#__PURE__*/React.createElement("div", {
     className: "row-title"
+  }, "Playback bar at top"), /*#__PURE__*/React.createElement("div", {
+    className: "row-desc"
+  }, "Show the autoscroll controls at the top of the song view instead of the bottom.")), /*#__PURE__*/React.createElement(Switch, {
+    on: tweaks.barAtTop,
+    onChange: v => setTweak('barAtTop', v)
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "settings-row"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "grow"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "row-title"
   }, "Metronome count-in"), /*#__PURE__*/React.createElement("div", {
     className: "row-desc"
   }, "Flash the playback bar at the song's tempo (BPM) before autoscroll starts.")), /*#__PURE__*/React.createElement(Switch, {
@@ -1442,6 +1448,28 @@ function SettingsScreen({
     name: "plus",
     size: 14
   }))))), /*#__PURE__*/React.createElement("div", {
+    className: "settings-section"
+  }, /*#__PURE__*/React.createElement("h2", null, "Display"), /*#__PURE__*/React.createElement("div", {
+    className: "settings-row"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "grow"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "row-title"
+  }, "Edge spacing"), /*#__PURE__*/React.createElement("div", {
+    className: "row-desc"
+  }, "Add empty space at the top and bottom of every screen \u2014 handy to clear device edges, notches, or system bars. Saved on this device only; also tunable live from the \u22EE menu while viewing a song.")), /*#__PURE__*/React.createElement(Btn, {
+    variant: "outline",
+    size: "sm",
+    onClick: () => setSpacingOpen(true)
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "spacing",
+    size: 14
+  }), " ", gaps.top || 0, "/", gaps.bottom || 0, " \xB7 Adjust"))), /*#__PURE__*/React.createElement(SpacingPopup, {
+    open: spacingOpen,
+    onClose: () => setSpacingOpen(false),
+    gaps: gaps,
+    setGaps: g => setTweak('gaps', g)
+  }), /*#__PURE__*/React.createElement("div", {
     className: "settings-section"
   }, /*#__PURE__*/React.createElement("h2", null, "Import & export"), /*#__PURE__*/React.createElement("div", {
     className: "settings-row"

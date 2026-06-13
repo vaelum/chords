@@ -2,6 +2,13 @@
 
 const { useState: useStateA, useEffect: useEffectA, useMemo: useMemoA, useCallback: useCallbackA, useRef: useRefA } = React;
 
+// The build id baked into this page by the server (main.py injects it). The
+// /events stream reports the server's current build on every connect; when it
+// no longer matches this — i.e. we reconnected after a deploy — useStore flips
+// updateReady and we surface a reload prompt. Null in the native Tauri shell
+// (which serves its own bundle, not through the backend), where we never prompt.
+const LOADED_BUILD = window.__BUILD_ID__ || null;
+
 // Turn a song/playlist title into a tidy download filename (no extension).
 function safeFileName(name) {
   const cleaned = String(name).trim().replace(/[^\w\-]+/g, '-').replace(/^-+|-+$/g, '');
@@ -219,6 +226,9 @@ function useStore() {
   const [songs, setSongs] = useStateA([]);
   const [playlists, setPlaylists] = useStateA([]);
   const [inbox, setInbox] = useStateA([]);
+  // Flips true when the SSE stream reports a build id newer than the one this
+  // page loaded (see LOADED_BUILD) — i.e. a deploy happened under us.
+  const [updateReady, setUpdateReady] = useStateA(false);
 
   function _normalizeUsers(users, meId) {
     const normalized = users.map(u => ({ ...u, handle: '@' + u.handle, me: u.id === meId }));
@@ -570,6 +580,13 @@ function useStore() {
 
     const onEvent = (evt) => {
       if (!evt || !evt.type) return;
+      // First frame of every (re)connect: the server's current build id. If it
+      // differs from what we loaded, a new version is live — prompt to reload.
+      // (Once true it stays true; reconnect churn can't unset it.)
+      if (evt.type === 'hello') {
+        if (LOADED_BUILD && evt.build && evt.build !== LOADED_BUILD) setUpdateReady(true);
+        return;
+      }
       // Skip the echo of a change this very tab made (it already updated locally).
       if (evt.origin && evt.origin === window.IT.clientId) return;
       if (evt.type === 'inbox') refetchInbox();
@@ -614,8 +631,9 @@ function useStore() {
     replaceWithIncoming, 
     updateMe, changePassword,
     getPlaylist, getSong,
+    updateReady,
     ...stubs,
-  }), [loading, currentUser, songs, playlists, inbox]);
+  }), [loading, currentUser, songs, playlists, inbox, updateReady]);
 }
 
 // ---------- theme mapping ----------
@@ -633,7 +651,9 @@ const DEFAULTS = /*EDITMODE-BEGIN*/{
   "keepAwake": true,
   "chordColor": "orange",
   "metronome": false,
-  "metronomeBeats": 4
+  "metronomeBeats": 4,
+  "barAtTop": false,
+  "gaps": { "top": 0, "bottom": 0 }
 }/*EDITMODE-END*/;
 
 // Lyric text size is a per-device preference, persisted client-side.
@@ -679,6 +699,38 @@ function loadMetronomeBeats() {
   return DEFAULTS.metronomeBeats;
 }
 
+// Autoscroll bar position — render the playback controls at the top of the song
+// view instead of the bottom. Per-device preference, persisted client-side.
+const BAR_AT_TOP_KEY = 'chords.barAtTop';
+function loadBarAtTop() {
+  try {
+    const v = localStorage.getItem(BAR_AT_TOP_KEY);
+    if (v === '1') return true;
+    if (v === '0') return false;
+  } catch (e) {}
+  return DEFAULTS.barAtTop;
+}
+
+// App-wide edge gaps — empty space added at the top/bottom of every view (in px).
+// Useful to clear device edges, notches, or system bars. Stored on this device
+// only (never synced to the server).
+const GAPS_KEY = 'chords.gaps';
+const GAP_MAX = 200;
+function clampGap(n) {
+  n = parseInt(n, 10);
+  if (isNaN(n)) return 0;
+  return Math.max(0, Math.min(GAP_MAX, n));
+}
+function loadGaps() {
+  try {
+    const o = JSON.parse(localStorage.getItem(GAPS_KEY) || 'null');
+    if (o && typeof o === 'object') {
+      return { top: clampGap(o.top), bottom: clampGap(o.bottom) };
+    }
+  } catch (e) {}
+  return { ...DEFAULTS.gaps };
+}
+
 // ---------- Public read-only playlist (shared link) ----------
 function PublicPlaylistView({ token, tweaks, setTweaks }) {
   const [data, setData] = useStateA(null);   // { name, gradient, songs: [...] }
@@ -698,6 +750,9 @@ function PublicPlaylistView({ token, tweaks, setTweaks }) {
     try { localStorage.setItem(LYRIC_SIZE_KEY, String(n)); } catch (e) {}
   };
   const toggleMode = () => setTweaks(t => ({ ...t, mode: t.mode === 'dark' ? 'light' : 'dark' }));
+
+  // Edge gaps apply to the public (shared-link) views too — handled at the root
+  // (#app padding + reduced --app-height in App), so nothing is needed here.
 
   if (error) {
     return (
@@ -744,6 +799,8 @@ function PublicPlaylistView({ token, tweaks, setTweaks }) {
                 chordColor={tweaks.chordColor}
                 metronome={tweaks.metronome}
                 metronomeBeats={tweaks.metronomeBeats}
+                barAtTop={tweaks.barAtTop}
+                gaps={tweaks.gaps}
               />
             </div>
           </main>
@@ -797,7 +854,7 @@ function PublicPlaylistView({ token, tweaks, setTweaks }) {
 // ---------- main App ----------
 function App() {
   const store = useStore();
-  const [tweaks, setTweaks] = useStateA(() => ({ ...DEFAULTS, lyricSize: loadLyricSize(), chordColor: loadChordColor(), metronome: loadMetronome(), metronomeBeats: loadMetronomeBeats() }));
+  const [tweaks, setTweaks] = useStateA(() => ({ ...DEFAULTS, lyricSize: loadLyricSize(), chordColor: loadChordColor(), metronome: loadMetronome(), metronomeBeats: loadMetronomeBeats(), barAtTop: loadBarAtTop(), gaps: loadGaps() }));
 
   const params = new URLSearchParams(window.location.search);
   const inviteToken = params.get('invite');
@@ -815,10 +872,23 @@ function App() {
   // versions, split-view, and the toolbar show/hide transition. visualViewport
   // reports the real visible height; CSS falls back to 100dvh/100vh before this
   // runs. scroll fires too because hiding the toolbar changes the visible height.
+  // Device-only edge gaps (top/bottom). Applied here, at the root, so every view
+  // is inset: padding goes on the #app element (a plain block — padding never
+  // collapses and nothing gets clipped), and the same amount is subtracted from
+  // --app-height so the fixed-height shell (and its bottom play bar) shrink to
+  // fit the remaining space instead of being pushed off-screen.
+  const gapTop = (tweaks.gaps && tweaks.gaps.top) || 0;
+  const gapBottom = (tweaks.gaps && tweaks.gaps.bottom) || 0;
   useEffectA(() => {
     const vv = window.visualViewport;
+    const root = document.getElementById('app');
+    if (root) {
+      root.style.paddingTop = gapTop + 'px';
+      root.style.paddingBottom = gapBottom + 'px';
+    }
     const setH = () => {
-      const h = (vv && vv.height) || window.innerHeight;
+      const visible = (vv && vv.height) || window.innerHeight;
+      const h = Math.max(0, visible - gapTop - gapBottom);
       document.documentElement.style.setProperty('--app-height', h + 'px');
     };
     setH();
@@ -836,7 +906,7 @@ function App() {
       window.removeEventListener('resize', setH);
       window.removeEventListener('orientationchange', setH);
     };
-  }, []);
+  }, [gapTop, gapBottom]);
 
   // A read-only public share link takes precedence over everything — it works
   // logged-out, and even a logged-in user lands in the read-only view (so they
@@ -854,6 +924,30 @@ function App() {
   }
 
   return <AppShell store={store} tweaks={tweaks} setTweaks={setTweaks} />;
+}
+
+// Shown when the server has deployed a newer build than this page loaded. We
+// prompt rather than auto-reload so we never discard unsaved work or yank the
+// user mid-song; reloading fetches the fresh index.html and assets.
+function UpdateBanner() {
+  return (
+    <div role="status" style={{
+      position: 'fixed', zIndex: 200, left: '50%',
+      top: 'calc(env(safe-area-inset-top, 0px) + 8px)',
+      transform: 'translateX(-50%)',
+      display: 'flex', alignItems: 'center', gap: 12,
+      maxWidth: 'calc(100vw - 12px)',
+      padding: '10px 10px 10px 16px',
+      background: 'var(--popover)', color: 'var(--popover-foreground)',
+      border: '1px solid var(--border)', borderRadius: 12,
+      boxShadow: '0 8px 28px rgba(0,0,0,.35)',
+    }}>
+      <Icon name="refresh" size={16} />
+      <span style={{ fontSize: 14, whiteSpace: 'nowrap' }}>A new version is available.</span>
+      <Btn variant="primary" onClick={() => window.location.reload()}
+           style={{ fontSize: 14, height: 30, padding: '0 18px' }}>Reload</Btn>
+    </div>
+  );
 }
 
 function AppShell({ store, tweaks, setTweaks }) {
@@ -895,6 +989,13 @@ function AppShell({ store, tweaks, setTweaks }) {
     }
     if ('metronomeBeats' in edits) {
       try { localStorage.setItem(METRONOME_BEATS_KEY, String(edits.metronomeBeats)); } catch (e) {}
+    }
+    if ('barAtTop' in edits) {
+      try { localStorage.setItem(BAR_AT_TOP_KEY, edits.barAtTop ? '1' : '0'); } catch (e) {}
+    }
+    // Edge gaps are a device-only preference, stored as a JSON blob.
+    if ('gaps' in edits) {
+      try { localStorage.setItem(GAPS_KEY, JSON.stringify(edits.gaps)); } catch (e) {}
     }
     try { window.parent.postMessage({ type: '__edit_mode_set_keys', edits }, '*'); } catch (e) {}
   }
@@ -942,8 +1043,12 @@ function AppShell({ store, tweaks, setTweaks }) {
 
   const me = store.currentUser;
 
+  // Edge gaps are applied app-wide at the root (see App's --app-height effect:
+  // #app padding + reduced --app-height), so nothing is needed on the shell here.
+
   return (
     <ToastProvider>
+      {store.updateReady && <UpdateBanner />}
       <div className={`app ${noChrome ? 'no-chrome' : ''}`}>
         <aside className="sidebar">
           <div className="sidebar-brand">
@@ -1050,6 +1155,9 @@ function AppShell({ store, tweaks, setTweaks }) {
                 chordColor={tweaks.chordColor}
                 metronome={tweaks.metronome}
                 metronomeBeats={tweaks.metronomeBeats}
+                barAtTop={tweaks.barAtTop}
+                gaps={tweaks.gaps}
+                setGaps={(g) => setTweak('gaps', g)}
               />
               );
             })()}
