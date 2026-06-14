@@ -52,13 +52,30 @@ DIST = ROOT / "dist"
 #   sdkmanager "ndk;26.3.11579264" "platforms;android-34" "build-tools;34.0.0"
 CI_NDK_VERSION = "26.3.11579264"
 
-# Local Android signing material (git-ignored). The generated gen/android project
-# stays regenerable — we sign the built release APK as a post-build step instead of
-# editing the generated Gradle files. CI ships an *unsigned* release APK; signing
-# here is what makes the local APK sideloadable.
-ANDROID_DIR = APP / ".android"
-KEYSTORE = ANDROID_DIR / "chords.jks"
+# Local Android signing material lives in a central vault OUTSIDE the repo, so the
+# keystore is never inside a project tree and one vault can sign several apps (one
+# subfolder per app: <vault>/<app>/<app>.jks + keystore.properties). Point
+# ANDROID_KEYSTORE_VAULT at the vault root; we use the <vault>/chords/ subfolder.
+# If the vault isn't configured (other contributors, or CI — which signs via its
+# own env vars / GitHub secrets), fall back to the in-repo app/.android so the repo
+# still builds. The generated gen/android project stays regenerable — we sign the
+# built release APK as a post-build step instead of editing the generated Gradle
+# files. CI ships an *unsigned* release APK; signing here makes it sideloadable.
+APP_KEY_NAME = "chords"
+_KEYSTORE_VAULT = os.environ.get("ANDROID_KEYSTORE_VAULT")
+ANDROID_DIR = (Path(_KEYSTORE_VAULT).expanduser() / APP_KEY_NAME
+               if _KEYSTORE_VAULT else APP / ".android")
+KEYSTORE = ANDROID_DIR / f"{APP_KEY_NAME}.jks"
 KEYSTORE_PROPS = ANDROID_DIR / "keystore.properties"
+
+
+def _disp(path):
+    """Path for display: repo-relative when inside the tree, else absolute (the
+    keystore vault lives outside the repo)."""
+    try:
+        return path.relative_to(ROOT)
+    except ValueError:
+        return path
 
 
 def run(cmd, cwd, extra_env=None):
@@ -267,7 +284,7 @@ def android_keygen(args, env):
     """Create a self-signed keystore + keystore.properties for sideloadable
     release APKs. Self-signed is fine for sideloading (not for the Play Store)."""
     if KEYSTORE.exists():
-        print(f"\033[1;33mkeystore already exists:\033[0m {KEYSTORE.relative_to(ROOT)} "
+        print(f"\033[1;33mkeystore already exists:\033[0m {_disp(KEYSTORE)} "
               "(delete it to regenerate)")
         return 1
     java_home = _java_home(env)
@@ -286,7 +303,7 @@ def android_keygen(args, env):
         return rc
     KEYSTORE_PROPS.write_text(
         f"storeFile={KEYSTORE}\nstorePassword={password}\nkeyAlias={alias}\nkeyPassword={password}\n")
-    print(f"\n\033[1;32mwrote\033[0m {KEYSTORE.relative_to(ROOT)} + keystore.properties (git-ignored).")
+    print(f"\n\033[1;32mwrote\033[0m {_disp(KEYSTORE)} + keystore.properties.")
     print("Back this keystore up — you need the same key to ship in-place upgrades.")
     return 0
 
