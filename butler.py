@@ -32,7 +32,6 @@ Examples:
 """
 
 import argparse
-import json
 import os
 import shutil
 import subprocess
@@ -409,10 +408,14 @@ def app_android(args):
 # extension
 # --------------------------------------------------------------------------- #
 
-def extension_package(_args):
+def extension_package(args):
     DIST.mkdir(exist_ok=True)
-    version = json.loads((EXT / "manifest.json").read_text()).get("version", "0.0.0")
-    out = DIST / f"chords-extension-{version}.zip"
+    # Name the zip with the same release label as the APK (the git tag on HEAD, else
+    # a UTC datetime), so a tagged release produces chords-extension-<tag>.zip that
+    # sits alongside chords-<tag>.apk on the GitHub Release. CI passes --label
+    # explicitly (mirroring the APK step) rather than relying on git describe.
+    label = getattr(args, "label", None) or _release_label()
+    out = DIST / f"chords-extension-{label}.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         for path in sorted(EXT.rglob("*")):
             if path.is_file():
@@ -462,7 +465,10 @@ def build_parser():
 
     # extension
     ep = components.add_parser("extension", help="browser extension").add_subparsers(dest="action", required=True)
-    ep.add_parser("package", help="zip into dist/").set_defaults(func=extension_package)
+    ep_pkg = ep.add_parser("package", help="zip into dist/")
+    ep_pkg.add_argument("--label", help="release label for the zip name "
+                        "(default: git tag on HEAD, else a UTC datetime)")
+    ep_pkg.set_defaults(func=extension_package)
 
     return p
 
