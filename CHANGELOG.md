@@ -12,6 +12,18 @@ GitHub Release body — so keep these sections accurate before tagging.
 
 - Work in progress lands here; move it under a new version heading when tagging.
 
+## [2026.6.2]
+
+The browser extension is now a downloadable release asset.
+
+### Added
+
+- **Browser extension download**: every release now ships
+  `chords-extension-<version>.zip` next to the desktop and Android builds, so you
+  can install the "Chords Importer" extension without checking out the source —
+  unzip it and load the folder unpacked in your browser
+  (`chrome://extensions` → Developer mode → Load unpacked).
+
 ## [2026.6.1]
 
 Mobile (Android) polish: the app now fits the screen and carries its own identity,
