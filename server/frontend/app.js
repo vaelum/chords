@@ -407,6 +407,15 @@ function useStore() {
   // Flips true when the SSE stream reports a build id newer than the one this
   // page loaded (see LOADED_BUILD) — i.e. a deploy happened under us.
   const [updateReady, setUpdateReady] = useStateA(false);
+  // Connectivity. Starts true; flipped false when the server is unreachable so
+  // the app keeps showing the last cached session (instead of the login screen)
+  // and surfaces an offline indicator. A mirror ref lets the SSE callbacks —
+  // which don't depend on `online` — read the live value without re-subscribing.
+  const [online, setOnline] = useStateA(true);
+  const onlineRef = useRefA(true);
+  useEffectA(() => {
+    onlineRef.current = online;
+  }, [online]);
   function _normalizeUsers(users, meId) {
     const normalized = users.map(u => ({
       ...u,
@@ -430,6 +439,25 @@ function useStore() {
     setPlaylists(playlistsData);
     setInbox(_normalizeInbox(inboxData));
   }, []);
+
+  // Restore the last cached session so an offline start is usable. The inbox is
+  // cached already-normalized (carries `.time`), so it goes back in as-is.
+  function _hydrateFromCache(c) {
+    if (Array.isArray(c.users)) window.IT.USERS = c.users;
+    setCurrentUser(c.user);
+    setSongs(c.songs || []);
+    setPlaylists(c.playlists || []);
+    setInbox(c.inbox || []);
+  }
+
+  // Re-fetch everything and clear the offline flag. Throws while still offline,
+  // so callers just swallow the rejection and try again later.
+  const _reconnect = useCallbackA(async () => {
+    const me = await window.IT.api('/auth/me');
+    setCurrentUser(me);
+    await _loadAll(me);
+    setOnline(true);
+  }, [_loadAll]);
   useEffectA(() => {
     if (!window.IT.getToken()) {
       setLoading(false);
@@ -438,10 +466,57 @@ function useStore() {
     window.IT.api('/auth/me').then(me => {
       setCurrentUser(me);
       return _loadAll(me);
-    }).catch(err => {
-      if (err.status === 401) window.IT.clearToken();
+    }).then(() => setOnline(true)).catch(err => {
+      // A real 401 means the saved session is no longer valid — drop it and
+      // fall through to the login screen.
+      if (err.status === 401) {
+        window.IT.clearToken();
+        window.IT.clearCache();
+        return;
+      }
+      // Server unreachable: keep the session and show the last cached state
+      // instead of the login screen. The reconnect poll below restores live
+      // data once the network returns.
+      if (window.IT.isOffline(err)) {
+        const cached = window.IT.loadCache();
+        if (cached && cached.user) {
+          _hydrateFromCache(cached);
+          setOnline(false);
+        }
+      }
     }).finally(() => setLoading(false));
   }, []);
+
+  // Persist a snapshot of the loaded session whenever it changes, so the next
+  // offline start has something to show. (window.IT.USERS is updated by
+  // _loadAll before the state setters that trigger this effect, so it's fresh.)
+  useEffectA(() => {
+    if (!currentUser) return;
+    window.IT.saveCache({
+      user: currentUser,
+      users: window.IT.USERS,
+      songs,
+      playlists,
+      inbox
+    });
+  }, [currentUser, songs, playlists, inbox]);
+
+  // While offline, retry the connection every minute (and immediately when the
+  // OS reports the network is back). On success _reconnect flips `online` true,
+  // which re-runs this effect and tears the timer down.
+  useEffectA(() => {
+    if (online) return;
+    if (!window.IT.getToken()) return;
+    const attempt = () => {
+      _reconnect().catch(() => {});
+    };
+    const id = setInterval(attempt, 60000);
+    window.addEventListener('online', attempt);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener('online', attempt);
+    };
+  }, [online, _reconnect]);
   const login = useCallbackA(async (handle, password) => {
     const data = await window.IT.api('/auth/login', {
       method: 'POST',
@@ -453,21 +528,29 @@ function useStore() {
     window.IT.setToken(data.accessToken);
     setCurrentUser(data.user);
     await _loadAll(data.user);
+    setOnline(true);
     setLoading(false);
   }, [_loadAll]);
   const setSession = useCallbackA(async data => {
     window.IT.setToken(data.accessToken);
     setCurrentUser(data.user);
     await _loadAll(data.user);
+    setOnline(true);
     setLoading(false);
   }, [_loadAll]);
+
+  // Manual logout is the only path that forgets the session: clear the token and
+  // the cached state so the next start asks for sign-in. (A network drop never
+  // does this — that's the whole point of the offline cache.)
   const logout = useCallbackA(() => {
     window.IT.clearToken();
+    window.IT.clearCache();
     setCurrentUser(null);
     setSongs([]);
     setPlaylists([]);
     setInbox([]);
     window.IT.USERS = [];
+    setOnline(true);
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -861,6 +944,9 @@ function useStore() {
       // (Once true it stays true; reconnect churn can't unset it.)
       if (evt.type === 'hello') {
         if (LOADED_BUILD && evt.build && evt.build !== LOADED_BUILD) setUpdateReady(true);
+        // The stream is up, so we're online again — if we'd been offline, pull
+        // fresh data (the poll below may also be racing this; first one wins).
+        if (!onlineRef.current) _reconnect().catch(() => {});
         return;
       }
       // Skip the echo of a change this very tab made (it already updated locally).
@@ -877,6 +963,9 @@ function useStore() {
           backoff = 1000; // clean server close → reconnect promptly
         } catch (err) {
           if (ac.signal.aborted || err.status === 401) return;
+          // Stream couldn't be opened — the server is unreachable. Mark offline
+          // so the indicator shows and the reconnect poll kicks in.
+          if (window.IT.isOffline(err)) setOnline(false);
         }
         if (stopped) return;
         await new Promise(r => setTimeout(r, backoff));
@@ -896,6 +985,7 @@ function useStore() {
   return useMemoA(() => ({
     loading,
     currentUser,
+    online,
     login,
     logout,
     setSession,
@@ -937,7 +1027,7 @@ function useStore() {
     getSong,
     updateReady,
     ...stubs
-  }), [loading, currentUser, songs, playlists, inbox, updateReady]);
+  }), [loading, currentUser, online, songs, playlists, inbox, updateReady]);
 }
 
 // ---------- theme mapping ----------
@@ -1413,6 +1503,21 @@ function App() {
   });
 }
 
+// Small badge shown in a top bar while the server is unreachable, so the user
+// knows they're looking at the last cached state. Deliberately omitted from the
+// song view while autoscrolling (that whole header is hidden then) to keep the
+// maximised reading view clean.
+function OfflinePill() {
+  return /*#__PURE__*/React.createElement("span", {
+    className: "offline-pill",
+    role: "status",
+    title: "You're offline \u2014 showing your last saved data. Reconnecting\u2026"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "cloudOff",
+    size: 14
+  }), /*#__PURE__*/React.createElement("span", null, "Offline"));
+}
+
 // Shown when the server has deployed a newer build than this page loaded. We
 // prompt rather than auto-reload so we never discard unsaved work or yank the
 // user mid-song; reloading fetches the fresh index.html and assets.
@@ -1745,7 +1850,7 @@ function AppShell({
     variant: "primary"
   }, store.unreadCount, " new")), route.name === 'settings' && /*#__PURE__*/React.createElement("h1", null, "Settings")), /*#__PURE__*/React.createElement("div", {
     className: "topbar-right"
-  }, /*#__PURE__*/React.createElement(IconBtn, {
+  }, !store.online && /*#__PURE__*/React.createElement(OfflinePill, null), /*#__PURE__*/React.createElement(IconBtn, {
     icon: tweaks.mode === 'dark' ? 'sun' : 'moon',
     label: "Toggle mode",
     onClick: () => setTweak('mode', tweaks.mode === 'dark' ? 'light' : 'dark')

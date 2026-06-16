@@ -4,6 +4,7 @@ window.IT = window.IT || {};
 
 const TOKEN_KEY = 'chords_token';
 const SERVER_KEY = 'chords_server';
+const CACHE_KEY = 'chords_cache';
 
 // Backend base URL. Empty on the web build (served same-origin → relative
 // `/api`). The native (Tauri) app has its own origin, so the user enters the
@@ -40,6 +41,29 @@ const CLIENT_ID = (window.crypto && crypto.randomUUID)
 function getToken() { return localStorage.getItem(TOKEN_KEY); }
 function setToken(t) { localStorage.setItem(TOKEN_KEY, t); }
 function clearToken() { localStorage.removeItem(TOKEN_KEY); }
+
+// Last successfully-loaded session (current user + library), so the native app
+// launched offline can show the last known state instead of the login screen.
+// Written whenever the loaded data changes (see useStore); read on an offline
+// start. Best-effort — storage may be full or disabled. Cleared only on a real
+// 401 or a manual logout, never on a transient network failure.
+function saveCache(snapshot) {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify(snapshot)); } catch (e) {}
+}
+function loadCache() {
+  try { const raw = localStorage.getItem(CACHE_KEY); return raw ? JSON.parse(raw) : null; }
+  catch (e) { return null; }
+}
+function clearCache() {
+  try { localStorage.removeItem(CACHE_KEY); } catch (e) {}
+}
+
+// A request that failed before the server answered (fetch rejected, so no HTTP
+// `.status`) means the server is unreachable — i.e. we're offline — as opposed
+// to a real API error (401/404/500…) which carries the response's status.
+function isOffline(err) {
+  return !!err && err.status === undefined;
+}
 
 async function api(path, opts = {}) {
   const token = getToken();
@@ -207,5 +231,6 @@ function pickJSONFile() {
 Object.assign(window.IT, {
   api, apiStream, openEventStream, getToken, setToken, clearToken, downloadJSON, pickJSONFile,
   getServer, setServer, isNative,
+  saveCache, loadCache, clearCache, isOffline,
   clientId: CLIENT_ID,
 });

@@ -12,6 +12,19 @@ GitHub Release body — so keep these sections accurate before tagging.
 
 - Work in progress lands here; move it under a new version heading when tagging.
 
+## [2026.6.3]
+
+Use your songbook offline — the app no longer needs a connection to open.
+
+### Added
+
+- **Offline mode**: the app now keeps a local snapshot of your last loaded
+  session, so launching (or losing connection) while offline shows your songs and
+  playlists instead of the login screen. It quietly retries the connection every
+  minute and refreshes once you're back online; an "Offline" badge appears in the
+  top bar (hidden while a song is maximised and autoscrolling). You're only asked
+  to sign in again if you manually log out (or the saved session is rejected).
+
 ## [2026.6.2]
 
 The browser extension is now a downloadable release asset.
