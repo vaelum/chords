@@ -826,7 +826,7 @@ function SongView({
     className: "sv-artist"
   }, song.artist)), /*#__PURE__*/React.createElement("div", {
     className: "sv-actions"
-  }, !readOnly && /*#__PURE__*/React.createElement(IconBtn, {
+  }, store.online === false && /*#__PURE__*/React.createElement(OfflinePill, null), !readOnly && /*#__PURE__*/React.createElement(IconBtn, {
     icon: "more",
     label: "More",
     onClick: e => setMenuEl(e.currentTarget)

@@ -610,6 +610,10 @@ function SongView({ song, playlist, store, onBack,
             <div className="sv-artist">{song.artist}</div>
           </div>
           <div className="sv-actions">
+            {/* Offline indicator. This header is already hidden while
+                autoscrolling, so the badge disappears in the maximised
+                performance view — exactly when it would be a distraction. */}
+            {store.online === false && <OfflinePill />}
             {/* All actions live in the ⋮ menu — both from library and playlist.
                 Read-only (public link) hides it: there's nothing to mutate. */}
             {!readOnly && <IconBtn icon="more" label="More" onClick={(e) => setMenuEl(e.currentTarget)} />}
