@@ -2803,6 +2803,42 @@ function ImportScreen({
   }, "Import"), /*#__PURE__*/React.createElement("div", {
     className: "section-sub"
   }, mode === 'web' ? 'Paste a link to a song or playlist, or describe what you’re looking for.' : 'Paste raw chord text or upload an image, then convert it into a song.')), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 18,
+      padding: '10px 12px',
+      display: 'flex',
+      gap: 10,
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      border: '1px solid var(--border)',
+      borderRadius: 'var(--radius-sm)',
+      color: 'var(--muted-foreground)'
+    }
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "download",
+    size: 16
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 13,
+      flex: 1,
+      minWidth: 220
+    }
+  }, "A site blocking the importer? The", ' ', /*#__PURE__*/React.createElement("strong", {
+    style: {
+      color: 'var(--foreground)'
+    }
+  }, "Chords Importer"), ' ', "browser extension scrapes pages from your own browser to get past that."), /*#__PURE__*/React.createElement("a", {
+    className: "btn btn-outline btn-sm",
+    style: {
+      textDecoration: 'none'
+    },
+    href: "https://github.com/vaelum/chords/releases/latest",
+    target: "_blank",
+    rel: "noopener noreferrer"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "external",
+    size: 14
+  }), " Get it for Chrome & Firefox")), /*#__PURE__*/React.createElement("div", {
     className: "seg-switch"
   }, [{
     key: 'web',

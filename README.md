@@ -33,7 +33,7 @@ chords/
 │   ├── docker/       Dockerfile + docker-compose for dev and prod
 │   └── scripts/      build / deploy / backup helpers
 ├── app/              Tauri v2 wrapper — native desktop & mobile builds
-├── extension/        Chrome (MV3) "Chords Importer" extension
+├── extension/        Chrome + Firefox (MV3) "Chords Importer" extension
 └── butler.py         project task runner for every component
 ```
 
@@ -70,10 +70,48 @@ it on first launch. Builds for Linux, Windows, and Android. See
 
 ### Browser extension (`extension/`)
 
-A Manifest V3 Chrome extension that scrapes the page you're viewing in your own
-browser and imports it into Chords — the client-side alternative to the
-server-side Playwright path for sites that block servers. See
+A Manifest V3 extension (Chrome and Firefox) that scrapes the page you're viewing
+in your own browser and imports it into Chords — the client-side alternative to
+the server-side Playwright path for sites that block servers. See
 [`extension/README.md`](extension/README.md).
+
+#### Install the extension
+
+Every [GitHub release](https://github.com/vaelum/chords/releases/latest) ships two
+zips next to the desktop/Android builds — grab the one for your browser:
+
+- `chords-extension-chrome-<version>.zip`
+- `chords-extension-firefox-<version>.zip`
+
+**Chrome / Edge / Brave (any Chromium browser)**
+
+1. Download `chords-extension-chrome-<version>.zip` and unzip it to a folder you'll
+   keep (the browser loads it from that location every launch — don't delete it).
+2. Open `chrome://extensions` (Edge: `edge://extensions`).
+3. Turn on **Developer mode** (top-right).
+4. Click **Load unpacked** and select the unzipped folder.
+
+The "Chords Importer" icon appears in the toolbar; right-click it → **Options** to
+set your site URL and auth token.
+
+**Firefox**
+
+The release zip is unsigned, so it loads as a *temporary* add-on (removed when
+Firefox restarts — re-load it after a restart, or self-sign via Mozilla's
+[AMO](https://addons.mozilla.org/developers/) for a permanent install):
+
+1. Download `chords-extension-firefox-<version>.zip` (no need to unzip).
+2. Open `about:debugging#/runtime/this-firefox`.
+3. Click **Load Temporary Add-on…** and pick the downloaded **zip**.
+4. Open the add-on's options (`about:addons` → Chords Importer → Preferences) to
+   set your site URL and auth token. Firefox treats `<all_urls>` access as opt-in,
+   so also grant **Access your data for all websites** under its **Permissions**
+   tab if scraping is blocked.
+
+Prefer to build from source instead of downloading? See
+[`extension/README.md`](extension/README.md) for loading the `extension/` folder
+directly, and run `python butler.py extension package` to produce the same zips
+locally in `dist/`.
 
 ## Getting started
 
@@ -111,7 +149,7 @@ node server/scripts/build-frontend.js   # recompile .jsx → .js after editing
 python butler.py app dev             # Tauri desktop app, hot reload
 python butler.py app build           # desktop bundles for this OS
 python butler.py app android build   # Android APK (needs the SDK/NDK toolchain)
-python butler.py extension package   # zip the extension into dist/
+python butler.py extension package   # zip Chrome + Firefox bundles into dist/
 ```
 
 See `python butler.py --help` for the full list of components and actions.

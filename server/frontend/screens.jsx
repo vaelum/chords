@@ -1605,6 +1605,28 @@ function ImportScreen({ store, onDone }) {
         </div>
       </div>
 
+      {/* Some sites block the server-side scraper. The browser extension does the
+          fetch in the user's own browser (their IP/session), getting past bot
+          checks the server can't. Point people at the GitHub release downloads. */}
+      <div style={{
+        marginBottom: 18, padding: '10px 12px', display: 'flex', gap: 10,
+        alignItems: 'center', flexWrap: 'wrap',
+        border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+        color: 'var(--muted-foreground)',
+      }}>
+        <Icon name="download" size={16} />
+        <span style={{ fontSize: 13, flex: 1, minWidth: 220 }}>
+          A site blocking the importer? The{' '}
+          <strong style={{ color: 'var(--foreground)' }}>Chords Importer</strong>{' '}
+          browser extension scrapes pages from your own browser to get past that.
+        </span>
+        <a className="btn btn-outline btn-sm" style={{ textDecoration: 'none' }}
+           href="https://github.com/vaelum/chords/releases/latest"
+           target="_blank" rel="noopener noreferrer">
+          <Icon name="external" size={14} /> Get it for Chrome &amp; Firefox
+        </a>
+      </div>
+
       <div className="seg-switch">
         {[
           { key: 'web', label: 'Web', icon: 'globe' },

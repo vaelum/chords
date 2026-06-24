@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Chords Importer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Scrape the current page in your own browser (past bot checks/captchas) and import it into Chords.",
   "permissions": ["activeTab", "scripting", "storage", "tabs"],
   "host_permissions": ["<all_urls>"],

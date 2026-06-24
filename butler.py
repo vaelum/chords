@@ -18,7 +18,7 @@ Components & actions:
             android    <init|dev|build|keygen>   Android (needs the SDK/NDK toolchain)
                        build [--debug] [--no-sign]; keygen creates a signing key
 
-  extension package    Zip the browser extension into dist/ for distribution
+  extension package    Zip the browser extension into dist/ (Chrome + Firefox bundles)
 
 Examples:
     python butler.py server dev
@@ -32,6 +32,7 @@ Examples:
 """
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
@@ -408,19 +409,68 @@ def app_android(args):
 # extension
 # --------------------------------------------------------------------------- #
 
-def extension_package(args):
-    DIST.mkdir(exist_ok=True)
-    # Name the zip with the same release label as the APK (the git tag on HEAD, else
-    # a UTC datetime), so a tagged release produces chords-extension-<tag>.zip that
-    # sits alongside chords-<tag>.apk on the GitHub Release. CI passes --label
-    # explicitly (mirroring the APK step) rather than relying on git describe.
-    label = getattr(args, "label", None) or _release_label()
-    out = DIST / f"chords-extension-{label}.zip"
+# Firefox add-on ID (gecko). Stable so storage/state survive updates and the
+# add-on can later be signed by Mozilla. Email-style IDs are valid AMO IDs.
+FIREFOX_ADDON_ID = "chords-importer@vaelum.de"
+# Oldest Firefox we claim to support. MV3 with an event-page background and the
+# scripting API is stable well before this; 115 is the current ESR baseline.
+FIREFOX_MIN_VERSION = "115.0"
+
+
+def _firefox_manifest(chrome_manifest):
+    """Turn the Chrome MV3 manifest into a Firefox MV3 one. Two changes:
+
+      * background — Firefox runs an event page (`scripts`), not a Chrome
+        service worker. The same background.js loads unchanged (it already
+        registers its listeners at top level and persists job state to
+        storage, so surviving an event-page unload works exactly as it does a
+        service-worker restart).
+      * browser_specific_settings.gecko — a stable add-on id (so storage and,
+        later, Mozilla signing work) plus a minimum Firefox version.
+
+    Everything else (permissions, icons, action, options_page) is identical."""
+    m = json.loads(json.dumps(chrome_manifest))  # deep copy — don't touch the original
+    m["background"] = {"scripts": ["background.js"]}
+    m["browser_specific_settings"] = {
+        "gecko": {"id": FIREFOX_ADDON_ID, "strict_min_version": FIREFOX_MIN_VERSION}
+    }
+    return m
+
+
+def _zip_extension(out, manifest_transform=None):
+    """Zip the extension/ tree into `out`. If `manifest_transform` is given, the
+    manifest.json entry is replaced by transform(parsed_manifest) instead of the
+    on-disk file — used to emit a Firefox-flavoured manifest from the same source."""
+    manifest_src = EXT / "manifest.json"
+    rewritten = None
+    if manifest_transform is not None:
+        rewritten = json.dumps(
+            manifest_transform(json.loads(manifest_src.read_text())), indent=2) + "\n"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         for path in sorted(EXT.rglob("*")):
-            if path.is_file():
-                z.write(path, path.relative_to(EXT))
+            if not path.is_file():
+                continue
+            arcname = path.relative_to(EXT).as_posix()
+            if rewritten is not None and path == manifest_src:
+                z.writestr(arcname, rewritten)
+            else:
+                z.write(path, arcname)
     print(f"\033[1;32mwrote\033[0m {out.relative_to(ROOT)} ({out.stat().st_size:,} bytes)")
+
+
+def extension_package(args):
+    DIST.mkdir(exist_ok=True)
+    # Name the zips with the same release label as the APK (the git tag on HEAD,
+    # else a UTC datetime), so a tagged release produces
+    # chords-extension-{chrome,firefox}-<tag>.zip sitting alongside
+    # chords-<tag>.apk on the GitHub Release. CI passes --label explicitly
+    # (mirroring the APK step) rather than relying on git describe. Two bundles:
+    # the same source, with a Chrome (service-worker) or Firefox (event-page)
+    # manifest — see _firefox_manifest.
+    label = getattr(args, "label", None) or _release_label()
+    _zip_extension(DIST / f"chords-extension-chrome-{label}.zip")
+    _zip_extension(DIST / f"chords-extension-firefox-{label}.zip",
+                   manifest_transform=_firefox_manifest)
     return 0
 
 
