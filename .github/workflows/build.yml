@@ -153,9 +153,10 @@ jobs:
             app/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
 
   # The browser extension is just static files (no Rust/Node/Android toolchain),
-  # so package it in a tiny standalone job and ship the zip on the Release next to
+  # so package it in a tiny standalone job and ship the zips on the Release next to
   # the native installers. Uses butler.py so the file selection / zip layout stays
-  # identical to a local `python butler.py extension package`.
+  # identical to a local `python butler.py extension package`, which emits both a
+  # Chrome (service-worker) and a Firefox (event-page) bundle from the same source.
   package-extension:
     name: extension-zip
     runs-on: ubuntu-latest
@@ -163,8 +164,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Package extension
         run: |
-          # Name the zip chords-extension-<label>.zip: the git tag on a tag build,
-          # else a UTC datetime stamp. Same label rule as the Android APK above.
+          # Name the zips chords-extension-{chrome,firefox}-<label>.zip: the git tag
+          # on a tag build, else a UTC datetime stamp. Same label rule as the APK.
           if [ "$GITHUB_REF_TYPE" = tag ]; then label="$GITHUB_REF_NAME"; else label="$(date -u +%Y%m%d-%H%M%S)"; fi
           python3 butler.py extension package --label "$label"
       - name: Upload artifact

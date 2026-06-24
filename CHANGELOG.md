@@ -12,6 +12,32 @@ GitHub Release body — so keep these sections accurate before tagging.
 
 - Work in progress lands here; move it under a new version heading when tagging.
 
+## [2026.6.4]
+
+The browser extension now works in Firefox too, and the app points you to it.
+
+### Added
+
+- **Firefox extension bundle**: every release now ships a Firefox build of the
+  "Chords Importer" extension (`chords-extension-firefox-<version>.zip`) alongside
+  the Chrome one (`chords-extension-chrome-<version>.zip`). The two are built from
+  the same source — only the manifest differs (Firefox uses an event-page
+  background and carries a gecko add-on id).
+- **Import screen pointer**: the Import screen now mentions the browser extension
+  for sites that block the server-side importer, with a one-click link to the
+  GitHub release downloads.
+
+### Changed
+
+- **Extension zip names**: the packaged extension is now
+  `chords-extension-chrome-<version>.zip` (was `chords-extension-<version>.zip`),
+  to sit clearly beside the new Firefox bundle.
+
+### Docs
+
+- **Manual install instructions** for both Chrome (Load unpacked) and Firefox
+  (Load Temporary Add-on) are documented in the README and `extension/README.md`.
+
 ## [2026.6.3]
 
 Use your songbook offline — the app no longer needs a connection to open.

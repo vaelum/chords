@@ -1,4 +1,4 @@
-# Chords Importer — Chrome extension
+# Chords Importer — Chrome & Firefox extension
 
 Scrapes the page you're looking at **in your own browser** and sends its rendered
 text to the Chords backend. Because the fetch/render happens in your real browser
@@ -23,11 +23,40 @@ It mirrors what the web app does, in two steps (see `frontend/api.js` + backend)
    but does **not** save them; the parsed song comes back in the `result` event.
 2. `POST /api/songs` with the parsed song to **persist** it.
 
-## Install (unpacked)
+## Install
+
+This one source tree ships as two bundles — Chrome uses a service-worker
+background, Firefox an event-page one (`python butler.py extension package`
+writes `dist/chords-extension-chrome-<label>.zip` and
+`dist/chords-extension-firefox-<label>.zip`; the only difference is the generated
+`manifest.json`). Prebuilt zips are attached to every
+[GitHub release](https://github.com/vaelum/chords/releases/latest).
+
+### Chrome / Edge / Brave (any Chromium browser)
+
+From source:
 
 1. Open `chrome://extensions`
 2. Enable **Developer mode** (top right)
 3. **Load unpacked** → select this `extension/` folder
+
+From a release: unzip `chords-extension-chrome-<label>.zip` to a folder you'll
+keep, then **Load unpacked** that folder (same steps).
+
+### Firefox
+
+The bundle is unsigned, so it loads as a **temporary** add-on (gone on restart;
+re-load it, or self-sign on Mozilla [AMO](https://addons.mozilla.org/developers/)
+for a permanent install):
+
+1. Open `about:debugging#/runtime/this-firefox`
+2. **Load Temporary Add-on…** → select the `chords-extension-firefox-<label>.zip`
+   (or, when working from source, the `manifest.json` produced by
+   `butler.py extension package` — Firefox's plain manifest differs from Chrome's,
+   so don't point it at this folder's `manifest.json` directly)
+3. Firefox treats `<all_urls>` as opt-in — if scraping is blocked, grant **Access
+   your data for all websites** under the add-on's **Permissions** tab in
+   `about:addons`.
 
 ## UI
 
@@ -113,6 +142,5 @@ POST to your backend wherever it's hosted. To tighten it, replace `<all_urls>` i
 
 ## Notes / caveats
 
-- No icons are bundled; Chrome shows a default puzzle-piece icon. Add `icons` +
-  `action.default_icon` to `manifest.json` for custom ones — the app already has
-  PNGs under `frontend/assets/png/`.
+- The chords icons under `assets/` are bundled and referenced from
+  `manifest.json`, so the toolbar shows the brand icon (not a puzzle piece).
