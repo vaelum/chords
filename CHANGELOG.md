@@ -10,7 +10,47 @@ GitHub Release body — so keep these sections accurate before tagging.
 
 ## [Unreleased]
 
-- Work in progress lands here; move it under a new version heading when tagging.
+### Changed
+
+- **AI import now runs on OpenRouter** instead of the Claude Agent SDK. Each
+  import step picks the cheapest model that does that particular job well, set
+  per *role* in `backend/llm.py` and overridable with env vars
+  (`CHORDS_MODEL_SEARCH` / `_SCAN` / `_PARSE` / `_VISION`):
+
+  | role | job | default model | ≈ per call |
+  | --- | --- | --- | --- |
+  | `search` | find candidate chord/tab URLs | `google/gemini-2.5-flash-lite` | $0.006 |
+  | `scan` | map a playlist page to song links | `google/gemini-2.5-flash-lite` | $0.002 |
+  | `parse` | page/pasted text → chords format | `google/gemini-3.1-flash-lite` | $0.006 |
+  | `vision` | photo of a chord sheet → chords format | `google/gemini-3.1-flash-lite` | $0.003 |
+
+  Web search uses OpenRouter's `web` plugin pinned to the Exa engine
+  ($0.005/search; left on `auto`, Google models would use native grounding at
+  ~7x that). The `openrouter:web_search` server tool is what OpenRouter's docs
+  recommend, but it is beta and returns `404 Server tool request failed` whenever
+  a strict `response_format` is attached — see `llm.py`. Every call logs its real
+  token count and cost.
+- **Structured outputs**: parses now request a strict JSON schema instead of
+  asking for a fenced JSON block, with the tolerant parser kept as a fallback.
+- **Slimmer image**: the container no longer installs Node.js or the Claude Code
+  CLI, and no longer mounts the host's `~/.claude` login.
+
+### Added
+
+- **`python butler.py server key`** sets the OpenRouter API key — on the remote
+  by default, `--local` for this machine, `--clear` to remove it. The key is
+  stored in the data directory's `secrets.json` (so it survives redeploys) and is
+  re-read per request, so no restart is needed.
+- **`python butler.py server deploy --openrouter-key`** sets the key as part of a
+  deploy; with no value it prompts with hidden input, and it defaults to
+  `$OPENROUTER_API_KEY` when that is set. A deploy to a remote with no key
+  configured now warns and offers to set one.
+- **`python butler.py server test`** runs the import-pipeline tests in
+  `server/tests/`: an offline suite driving the real code against a stub
+  OpenRouter server (free), and `--live` for a suite that hits the real API
+  (~$0.01 a run) covering all four roles end to end, including chord-sheet OCR
+  from an image fixture. The live suite reads the key from `.secrets`,
+  `$OPENROUTER_API_KEY` or `~/.chords/secrets.json`, and skips without one.
 
 ## [2026.6.4]
 

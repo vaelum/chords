@@ -1,7 +1,7 @@
 """Headless-browser page fetching via Playwright.
 
 Used by the import flow to render JS-heavy chord sites into plain text
-before handing the content to Claude.
+before handing the content to the model (see agent.py / llm.py).
 
 Browser behaviour is configurable via env vars:
   CHORDS_BROWSER_CHANNEL   "chrome" (default) uses the system Chrome install,

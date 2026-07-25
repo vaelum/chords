@@ -10,11 +10,12 @@ services:
         APT_MIRROR: ${APT_MIRROR:-}
     volumes:
       - ${HOME}/.chords:/chords-data
-      # Forward the host's Claude Code login so the agent SDK can authenticate.
-      - ${HOME}/.claude:/home/chords/.claude
-      - ${HOME}/.claude.json:/home/chords/.claude.json
     environment:
       CHORDS_DATA_DIR: /chords-data
+      # AI import key. Normally left empty here and read from
+      # /chords-data/secrets.json instead (set it with
+      # `python butler.py server key`); this passthrough is for one-off overrides.
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
     restart: unless-stopped
 
   caddy:

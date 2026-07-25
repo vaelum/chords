@@ -1,11 +1,17 @@
-"""Manages chords-data/secrets.json — JWT signing key and admin passcode.
+"""Manages chords-data/secrets.json — JWT signing key, admin passcode, and the
+OpenRouter API key used by the AI import pipeline.
 
-Both values are auto-generated on first run and persisted to the data directory.
-The admin passcode is read fresh from the file on every admin login, so the
-operator can change it by editing the file directly.
+The JWT secret and admin passcode are auto-generated on first run and persisted
+to the data directory. The OpenRouter key is *not* generated — it's supplied by
+the operator (`python butler.py server key --openrouter-key …`, or the
+OPENROUTER_API_KEY environment variable).
+
+The passcode and the OpenRouter key are read fresh from the file on every use,
+so the operator can rotate either by editing the file directly.
 """
 
 import json
+import os
 import secrets
 import string
 from pathlib import Path
@@ -64,3 +70,26 @@ def get_jwt_secret() -> str:
 def get_admin_passcode() -> str:
     """Read fresh from disk so edits to secrets.json take effect immediately."""
     return get_secrets()["admin_passcode"]
+
+
+def get_openrouter_key() -> str:
+    """OpenRouter API key for the AI import pipeline, or "" if none is set.
+
+    The environment wins over secrets.json so a container can be handed a key
+    without writing it into the data volume. Read fresh on every call, so
+    rotating the key needs no restart."""
+    env = (os.environ.get("OPENROUTER_API_KEY") or "").strip()
+    if env:
+        return env
+    return (get_secrets().get("openrouter_api_key") or "").strip()
+
+
+def set_openrouter_key(key: str) -> None:
+    """Persist (or, with an empty value, remove) the OpenRouter API key."""
+    data = get_secrets()
+    key = (key or "").strip()
+    if key:
+        data["openrouter_api_key"] = key
+    else:
+        data.pop("openrouter_api_key", None)
+    _write(data)
