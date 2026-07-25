@@ -19,8 +19,9 @@ This is the client-side alternative to the server-side Playwright path in
 It mirrors what the web app does, in two steps (see `frontend/api.js` + backend):
 
 1. `POST /api/import/extract-text` with `{text, url}` → NDJSON stream of
-   `progress` / `result` / `error` events. This **parses** the chords with Claude
-   but does **not** save them; the parsed song comes back in the `result` event.
+   `progress` / `result` / `error` events. This **parses** the chords with the
+   server's AI import pipeline but does **not** save them; the parsed song comes
+   back in the `result` event.
 2. `POST /api/songs` with the parsed song to **persist** it.
 
 ## Install

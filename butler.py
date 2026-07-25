@@ -10,6 +10,11 @@ Components & actions:
             dev        Build & start the dev stack in Docker (port 8000, no Caddy)
             build      Build & start the production stack in Docker (Caddy + TLS)
             deploy     Rsync the server/ folder to the remote and restart it
+                       [--openrouter-key KEY|- ] sets the AI import key too
+            key        Set the OpenRouter API key (remote by default, --local
+                       for this machine). Prompts if no key is given.
+            test       Run the import-pipeline tests. Offline by default;
+                       --live hits the real OpenRouter API (~$0.01 a run)
             backup     Back up the local ~/.chords data directory
 
   app       dev        Run the Tauri desktop app with hot reload
@@ -23,6 +28,8 @@ Components & actions:
 Examples:
     python butler.py server dev
     python butler.py server deploy
+    python butler.py server deploy --openrouter-key -    # prompt, then deploy
+    python butler.py server key --local                  # key for local runs
     python butler.py app dev
     python butler.py app build --bundles deb appimage
     python butler.py app android keygen          # one-time: signing key for release APKs
@@ -34,6 +41,7 @@ Examples:
 import argparse
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -144,8 +152,182 @@ def server_build(_args):
     return run(["bash", "scripts/build.sh"], cwd=SERVER)
 
 
-def server_deploy(_args):
+# --- OpenRouter API key ---------------------------------------------------- #
+# AI import (search / parse / vision) runs on OpenRouter, so the service needs an
+# API key. It lives in the data directory's secrets.json — the same file as the
+# JWT secret and admin passcode — which is a mounted volume, so it survives
+# redeploys and image rebuilds. The backend re-reads it on every call, so setting
+# or rotating it needs no restart.
+
+# Merges the key read from stdin into <data dir>/secrets.json. Passed to the
+# remote as `python3 -c <script>` with the key on stdin, so the secret never
+# appears in argv (visible in `ps`) or in a shell history.
+_KEY_SCRIPT = """
+import json, os, pathlib, sys
+key = sys.stdin.read().strip()
+p = pathlib.Path(os.environ.get("CHORDS_DATA_DIR") or os.path.expanduser("~/.chords"))
+p.mkdir(parents=True, exist_ok=True)
+f = p / "secrets.json"
+try:
+    data = json.loads(f.read_text())
+    if not isinstance(data, dict):
+        data = {}
+except Exception:
+    data = {}
+if key:
+    data["openrouter_api_key"] = key
+else:
+    data.pop("openrouter_api_key", None)
+f.write_text(json.dumps(data, indent=2))
+f.chmod(0o600)
+print("set" if key else "cleared", f)
+"""
+
+# Prints "yes"/"no" — used to warn on deploy when AI import would be dead.
+_KEY_CHECK_SCRIPT = """
+import json, os, pathlib
+p = pathlib.Path(os.environ.get("CHORDS_DATA_DIR") or os.path.expanduser("~/.chords"))
+try:
+    data = json.loads((p / "secrets.json").read_text())
+except Exception:
+    data = {}
+print("yes" if (data.get("openrouter_api_key") or "").strip() else "no")
+"""
+
+
+def _deploy_remote():
+    """The ssh target from server/.deploy-target, or None (with a message)."""
+    target = SERVER / ".deploy-target"
+    if not target.is_file():
+        print(f"\033[1;31merror:\033[0m {_disp(target)} not found. Create it with the "
+              "deploy target, e.g.: echo 'user@example.com' > server/.deploy-target",
+              file=sys.stderr)
+        return None
+    remote = target.read_text().strip()
+    if not remote:
+        print(f"\033[1;31merror:\033[0m {_disp(target)} is empty.", file=sys.stderr)
+        return None
+    return remote
+
+
+def _mask(key):
+    return f"{key[:8]}…{key[-4:]}" if len(key) > 16 else "…"
+
+
+def _prompt_key():
+    import getpass
+    try:
+        return getpass.getpass("OpenRouter API key (input hidden): ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return ""
+
+
+def _resolve_key(value):
+    """Turn the --openrouter-key argument into an actual key.
+
+      None      -> not requested (falls back to $OPENROUTER_API_KEY if set)
+      "-" / ""  -> prompt for it
+      anything  -> use it verbatim
+    """
+    if value is None:
+        env = (os.environ.get("OPENROUTER_API_KEY") or "").strip()
+        if env:
+            print(f"\033[1;32musing\033[0m OPENROUTER_API_KEY from the environment "
+                  f"({_mask(env)})")
+        return env
+    if value in ("-", ""):
+        return _prompt_key()
+    return value.strip()
+
+
+def _write_key(key, remote=None):
+    """Write (or, with an empty key, remove) the OpenRouter key in secrets.json —
+    on `remote` over ssh, or in the local data directory. Returns an exit code."""
+    cmd = ["ssh", remote, f"python3 -c {shlex.quote(_KEY_SCRIPT)}"] if remote \
+        else [sys.executable, "-c", _KEY_SCRIPT]
+    where = remote or "this machine"
+    try:
+        r = subprocess.run(cmd, input=key + "\n", text=True, capture_output=True)
+    except FileNotFoundError as e:
+        print(f"\033[1;31merror:\033[0m {e}", file=sys.stderr)
+        return 127
+    if r.returncode != 0:
+        print(f"\033[1;31merror:\033[0m could not write the key on {where}:\n"
+              f"{r.stderr.strip()}", file=sys.stderr)
+        return r.returncode
+    action = "cleared" if not key else f"set ({_mask(key)})"
+    print(f"\033[1;32mOpenRouter key {action}\033[0m on {where} — "
+          f"{r.stdout.strip().split(' ', 1)[-1]}")
+    print("The backend re-reads it per request, so no restart is needed.")
+    return 0
+
+
+def _remote_has_key(remote):
+    try:
+        r = subprocess.run(["ssh", remote, f"python3 -c {shlex.quote(_KEY_CHECK_SCRIPT)}"],
+                           text=True, capture_output=True)
+    except FileNotFoundError:
+        return True  # can't tell — don't nag
+    return r.returncode != 0 or r.stdout.strip() == "yes"
+
+
+def server_key(args):
+    # Bare `server key` takes $OPENROUTER_API_KEY when it is set, and otherwise
+    # prompts — same resolution order as deploy.
+    key = "" if args.clear else (_resolve_key(args.openrouter_key) or _prompt_key())
+    if not key and not args.clear:
+        print("\033[1;33maborted:\033[0m no key entered.")
+        return 1
+    if args.local:
+        return _write_key(key)
+    remote = _deploy_remote()
+    return _write_key(key, remote) if remote else 1
+
+
+def server_deploy(args):
+    # Ship the key first, so the container that comes up already has it.
+    key = _resolve_key(args.openrouter_key)
+    remote = _deploy_remote()
+    if not remote:
+        return 1
+    if key:
+        rc = _write_key(key, remote)
+        if rc != 0:
+            return rc
+    elif not _remote_has_key(remote):
+        print("\n\033[1;33mnote:\033[0m no OpenRouter API key is set on the remote — "
+              "AI import will be unavailable.")
+        if sys.stdin.isatty():
+            entered = _prompt_key()
+            if entered:
+                rc = _write_key(entered, remote)
+                if rc != 0:
+                    return rc
+        else:
+            print("      Set one with: python butler.py server key")
+
     return run(["bash", "scripts/deploy.sh"], cwd=SERVER)
+
+
+def server_test(args):
+    """Run the import-pipeline tests (server/tests/).
+
+    Offline by default: a stub OpenRouter server, no key and no cost. `--live`
+    additionally runs the real-API suite, which reads the key from .secrets /
+    $OPENROUTER_API_KEY / ~/.chords/secrets.json and skips if there is none."""
+    tests = SERVER / "tests"
+    rc = 0
+    if not args.live_only:
+        rc = run([sys.executable, str(tests / "test_pipeline.py")], cwd=tests)
+        if rc != 0:
+            return rc
+    if args.live or args.live_only:
+        cmd = [sys.executable, str(tests / "test_live.py")]
+        if args.only:
+            cmd += ["--only", args.only]
+        rc = run(cmd, cwd=tests)
+    return rc
 
 
 def server_backup(_args):
@@ -492,7 +674,28 @@ def build_parser():
     sp.add_parser("run", help="local uvicorn --reload (no Docker)").set_defaults(func=server_run)
     sp.add_parser("dev", help="Docker dev stack (port 8000)").set_defaults(func=server_dev)
     sp.add_parser("build", help="Docker production stack").set_defaults(func=server_build)
-    sp.add_parser("deploy", help="deploy server/ to the remote").set_defaults(func=server_deploy)
+    s_dep = sp.add_parser("deploy", help="deploy server/ to the remote")
+    s_dep.add_argument("--openrouter-key", nargs="?", const="-", metavar="KEY",
+                       help="set the OpenRouter API key on the remote before deploying; "
+                            "pass no value (or '-') to be prompted. Defaults to "
+                            "$OPENROUTER_API_KEY when that is set.")
+    s_dep.set_defaults(func=server_deploy)
+    s_key = sp.add_parser("key", help="set the OpenRouter API key for AI import")
+    s_key.add_argument("--openrouter-key", nargs="?", const="-", metavar="KEY",
+                       help="the key (default: prompt with hidden input)")
+    s_key.add_argument("--local", action="store_true",
+                       help="write to this machine's data dir instead of the remote")
+    s_key.add_argument("--clear", action="store_true", help="remove the stored key")
+    s_key.set_defaults(func=server_key)
+    s_test = sp.add_parser("test", help="run the import-pipeline tests")
+    s_test.add_argument("--live", action="store_true",
+                        help="also run the real-API suite (~$0.01 of OpenRouter credit)")
+    s_test.add_argument("--live-only", action="store_true",
+                        help="skip the offline suite and run only the live one")
+    s_test.add_argument("--only", metavar="NAMES",
+                        help="live suite: comma-separated subset "
+                             "(catalog,parse,scan,auto,search,vision)")
+    s_test.set_defaults(func=server_test)
     sp.add_parser("backup", help="back up ~/.chords").set_defaults(func=server_backup)
 
     # app

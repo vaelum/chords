@@ -7,7 +7,9 @@ FROM python:3.12-slim
 # uses it. trixie ships the deb822 sources file; older images use sources.list.
 ARG APT_MIRROR=
 
-# Install Node.js (needed by the Claude Code CLI) and curl for NodeSource setup.
+# Apply the mirror rewrite up front so the later `playwright --with-deps` apt
+# run uses it too. ca-certificates is needed for the outbound HTTPS calls to
+# OpenRouter.
 RUN if [ -n "$APT_MIRROR" ]; then \
       for f in /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources; do \
         if [ -f "$f" ]; then \
@@ -19,13 +21,8 @@ RUN if [ -n "$APT_MIRROR" ]; then \
       done; \
     fi \
  && apt-get update \
- && apt-get install -y --no-install-recommends curl ca-certificates gnupg \
- && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
- && apt-get install -y --no-install-recommends nodejs \
+ && apt-get install -y --no-install-recommends ca-certificates \
  && rm -rf /var/lib/apt/lists/*
-
-# Claude Code CLI — invoked under the hood by the Python agent SDK
-RUN npm install -g @anthropic-ai/claude-code
 
 # Create non-root user with UID/GID 1000 to match the typical host user
 RUN groupadd --gid 1000 chords \
