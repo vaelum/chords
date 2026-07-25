@@ -13,3 +13,5 @@ app/server.local*
 app/.android/
 # butler.py build artifacts (extension zips, etc.)
 dist/
+
+.secrets
