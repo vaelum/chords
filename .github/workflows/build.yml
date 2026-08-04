@@ -162,7 +162,31 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # butler.py is a shim: the harness it drives lives in the private
+      # vaelum/butler-private repo. Its normal bootstrap installs that over SSH,
+      # which a GitHub-hosted runner can't do (and GITHUB_TOKEN cannot read a
+      # *different* private repo either), so check the harness out with a
+      # read-only PAT and point the shim at the checkout instead. That skips the
+      # venv bootstrap entirely — no network install, no cache.
+      #
+      # Requires a BUTLER_HARNESS_TOKEN secret: a fine-grained PAT with
+      # Contents: read on vaelum/butler-private.
+      - name: Resolve the pinned harness ref
+        id: harness
+        run: echo "ref=$(sed -n 's/^HARNESS_REF = "\(.*\)"/\1/p' butler.py)" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the butler harness
+        uses: actions/checkout@v4
+        with:
+          repository: vaelum/butler-private
+          ref: ${{ steps.harness.outputs.ref }}
+          path: .butler-harness
+          token: ${{ secrets.BUTLER_HARNESS_TOKEN }}
+
       - name: Package extension
+        env:
+          BUTLER_HARNESS_PATH: ${{ github.workspace }}/.butler-harness
         run: |
           # Name the zips chords-extension-{chrome,firefox}-<label>.zip: the git tag
           # on a tag build, else a UTC datetime stamp. Same label rule as the APK.

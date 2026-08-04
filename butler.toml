@@ -1,0 +1,72 @@
+# butler configuration for chords.
+#
+# `python butler.py --help` shows what this file produced; `doctor` says whether
+# the tooling for it is installed. Anything this file can't express lives in
+# butler_tasks.py.
+
+[project]
+name = "chords"
+dist = "dist"
+
+# --------------------------------------------------------------------------- #
+# app — Tauri desktop + Android
+# --------------------------------------------------------------------------- #
+
+[app]
+kind = "tauri"
+dir  = "app"
+# The master art is shared with the web frontend, so it lives outside app/.
+icon_source = "server/frontend/assets/png/chords-icon-1024.png"
+
+[app.android]
+key_name = "chords"
+# The keystore lives in <$ANDROID_KEYSTORE_VAULT|~/Documents/important>/chords/,
+# outside any repo. Without a vault butler falls back to app/.android so the
+# repo still builds, and says so.
+dname = "CN=chords, OU=chords, O=chords, C=DE"
+# Pinned to match CI (.github/workflows/build.yml), so a local build mirrors the
+# released APK. Install it with:
+#   sdkmanager "ndk;26.3.11579264" "platforms;android-34" "build-tools;34.0.0"
+ndk_version = "26.3.11579264"
+# chords talks to an HTTPS backend, so neither of these is needed.
+cleartext = false
+split_abi = false
+
+# --------------------------------------------------------------------------- #
+# server — FastAPI behind Caddy, driven by its own scripts
+# --------------------------------------------------------------------------- #
+
+[server]
+kind   = "fastapi"
+dir    = "server"
+module = "backend.main:app"
+port   = 8000
+# The stack is built and deployed by server/scripts/*.sh (Caddy, TLS, the
+# frontend build), not by a bare `docker compose up` — see [server.scripts].
+compose = false
+# Empty: `server run` uses the active interpreter, matching how the backend's
+# requirements are installed (see README). A stray server/.venv must not
+# silently become the thing that runs.
+venv = ""
+
+[server.scripts]
+dev    = { cmd = ["bash", "scripts/build.sh", "dev"], help = "dev stack in Docker (port 8000, no Caddy)" }
+build  = { cmd = ["bash", "scripts/build.sh"],        help = "production stack in Docker (Caddy + TLS)" }
+deploy = { cmd = ["bash", "scripts/deploy.sh"],       help = "rsync server/ to the remote and restart it" }
+backup = { cmd = ["bash", "scripts/backup.sh"],       help = "back up the local ~/.chords data directory" }
+
+# --------------------------------------------------------------------------- #
+# extension — one source tree, Chrome and Firefox bundles
+# --------------------------------------------------------------------------- #
+
+[extension]
+dir      = "extension"
+artifact = "chords-extension"
+
+[extension.firefox]
+# Stable, so storage/state survive updates and Mozilla can sign the add-on
+# later. Email-style ids are valid AMO ids.
+id = "chords-importer@vaelum.de"
+# The current ESR baseline. MV3 with an event-page background and the scripting
+# API is stable well before this.
+min_version = "115.0"
