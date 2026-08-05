@@ -34,11 +34,11 @@ chords/
 │   └── scripts/      build / deploy / backup helpers
 ├── app/              Tauri v2 wrapper — native desktop & mobile builds
 ├── extension/        Chrome + Firefox (MV3) "Chords Importer" extension
-├── butler.py         task runner for every component (a shim over the shared
-│                     butler harness; butler.toml declares what chords has,
-│                     butler_tasks.py holds the chords-specific tasks)
-├── butler.toml
-└── butler_tasks.py
+├── butler.py         task runner for every component — a shim over the shared
+│                     butler harness
+└── butler/
+    ├── butler.toml       declares what chords has
+    └── butler_tasks.py   the chords-specific tasks
 ```
 
 ### Backend (`server/backend`)
@@ -140,12 +140,11 @@ locally in `dist/`.
 
 Everything is driven through `butler.py`. It is a small bootstrap shim: on first
 use it prepares a cached virtualenv holding the shared
-[butler harness](https://github.com/vaelum/butler-private) (pinned by
-`HARNESS_REF` in that file) and then hands off to it. Nothing to install by hand
-— but the first run needs network access and an SSH key with read access to that
-repo. What chords itself declares lives in `butler.toml`; what only chords does
-(the OpenRouter key workflow, the import-pipeline tests) lives in
-`butler_tasks.py`.
+[butler harness](https://github.com/vaelum/butler) (pinned by `HARNESS_REF` in
+that file) and then hands off to it. Nothing to install by hand; the first run
+just needs network access. What chords itself declares lives in
+`butler/butler.toml`; what only chords does (the OpenRouter key workflow, the
+import-pipeline tests) lives in `butler/butler_tasks.py`.
 
 Run `python butler.py doctor` on a new machine to see what tooling is present.
 
