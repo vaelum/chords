@@ -2,9 +2,9 @@
 
 A "build" is the exact set of frontend asset bytes this process is serving. We
 hash those bytes once at import and use the short digest as the build id. Because
-a deploy both replaces the files AND restarts the process (scripts/deploy.sh runs
-`docker compose down` then `up`), every deploy yields a fresh import that
-recomputes a new id — no manual version bumping needed.
+a deploy both replaces the files AND restarts the process (`butler.py server
+deploy` runs `docker compose down` then `up`), every deploy yields a fresh
+import that recomputes a new id — no manual version bumping needed.
 
 The id reaches the client two ways, and the client compares them:
   - injected into index.html at serve time (see main.py), so a freshly loaded

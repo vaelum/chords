@@ -1,16 +1,18 @@
 """chords-specific butler tasks.
 
-Two things butler.toml can't express:
+Three things butler.toml can't express:
 
   * the OpenRouter API key that AI import runs on — it lives in the data
     directory's secrets.json (a mounted volume, so it survives redeploys) and
     can be set locally or on the remote, which is a small workflow of its own;
   * the import-pipeline test suite, which is two suites with a cost attached to
-    one of them, not a single pytest invocation.
+    one of them, not a single pytest invocation;
+  * the two ends of a deploy: the frontend's .jsx has to be compiled locally
+    first (the remote runs Docker and nothing else), and the admin passcode is
+    worth printing afterwards rather than making someone go and read it.
 
-`server deploy` is wrapped rather than replaced: the built-in still runs
-scripts/deploy.sh, this only ships the key first so the container that comes up
-already has it.
+`server deploy` is wrapped, not replaced — the built-in does the rsync, build,
+stop, snapshot and start.
 """
 
 import os
@@ -66,17 +68,12 @@ print("yes" if (data.get("openrouter_api_key") or "").strip() else "no")
 
 
 def _deploy_remote(ctx):
-    """The ssh target from server/.deploy-target."""
-    target = ctx.cfg.server.dir / ".deploy-target"
-    if not target.is_file():
-        raise ButlerError(
-            f"{ctx.disp(target)} not found",
-            hint="Create it with the deploy target, e.g.:\n"
-                 "  echo 'user@example.com' > server/.deploy-target")
-    remote = target.read_text().strip()
-    if not remote:
-        raise ButlerError(f"{ctx.disp(target)} is empty")
-    return remote
+    """The ssh target — the same one `server deploy` uses, from
+    server/.deploy-target via [server.deploy] host_file."""
+    deploy = ctx.cfg.server.deploy
+    if deploy is None:
+        raise ButlerError("this project has no [server.deploy] configuration")
+    return deploy.ssh_host
 
 
 def _mask(key):
@@ -163,12 +160,17 @@ def server_key(ctx, args):
                      "pass no value (or '-') to be prompted. Defaults to "
                      "$OPENROUTER_API_KEY when that is set.")])
 def server_deploy(ctx, args, inner):
-    """Ship the key first, so the container that comes up already has it."""
+    """Compile the frontend, ship the key, deploy, then print the admin login.
+
+    The key goes up first so the container that comes up already has it; the
+    .jsx is compiled here because the remote runs Docker and nothing else, and
+    the built-in rsync ships whatever is in the tree.
+    """
     key = _resolve_key(args.openrouter_key)
     remote = _deploy_remote(ctx)
     if key:
         _write_key(ctx, key, remote)
-    elif not _remote_has_key(remote):
+    elif not ctx.dry_run and not _remote_has_key(remote):
         ui.plain()
         ui.note("no OpenRouter API key is set on the remote — AI import will be "
                 "unavailable.")
@@ -178,7 +180,47 @@ def server_deploy(ctx, args, inner):
                 _write_key(ctx, entered, remote)
         else:
             ui.plain("      Set one with: python butler.py server key")
-    return inner()
+
+    rc = ctx.run([_node(ctx), "scripts/build-frontend.js"], cwd=ctx.cfg.server.dir)
+    if rc != 0:
+        raise ButlerError("deploy aborted: the frontend build failed", code=rc)
+
+    rc = inner()
+    if rc == 0:
+        _print_admin_login(ctx, remote)
+    return rc
+
+
+def _node(ctx):
+    node = proc.which("node")
+    if node is None:
+        raise ButlerError(
+            "node is not installed",
+            hint="The frontend's .jsx is compiled locally before the rsync — the "
+                 "remote only runs Docker.", code=127)
+    return node
+
+
+# Prints the admin passcode from the remote data directory. Read on the remote,
+# using the REMOTE's data dir and home — the old deploy.sh interpolated $HOME
+# into the ssh command, so it read the local user's path on the far end and only
+# worked when the two usernames happened to match.
+_PASSCODE_SCRIPT = """
+import json, os, pathlib
+p = pathlib.Path(os.environ.get("CHORDS_DATA_DIR") or os.path.expanduser("~/.chords"))
+try:
+    print(json.loads((p / "secrets.json").read_text()).get("admin_passcode") or "(not set)")
+except Exception:
+    print("(could not read)")
+"""
+
+
+def _print_admin_login(ctx, remote):
+    if ctx.dry_run:
+        return
+    r = proc.capture(["ssh", remote, f"python3 -c {shlex.quote(_PASSCODE_SCRIPT)}"])
+    ui.plain()
+    ui.ok("admin login", f"handle=admin  password={r.out.strip() or '(could not read)'}")
 
 
 # --------------------------------------------------------------------------- #

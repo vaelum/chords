@@ -33,16 +33,18 @@ cleartext = false
 split_abi = false
 
 # --------------------------------------------------------------------------- #
-# server — FastAPI behind Caddy, driven by its own scripts
+# server — FastAPI behind Caddy
 # --------------------------------------------------------------------------- #
 
 [server]
-kind   = "fastapi"
-dir    = "server"
-module = "backend.main:app"
-port   = 8000
-# The stack is built and deployed by server/scripts/*.sh (Caddy, TLS, the
-# frontend build), not by a bare `docker compose up` — see [server.scripts].
+kind    = "fastapi"
+dir     = "server"
+module  = "backend.main:app"
+port    = 8000
+service = "chords"
+# The local stack is built by server/scripts/build.sh (Caddy, TLS, the frontend
+# build), not by a bare `docker compose up` — see [server.scripts]. Deploying is
+# the built-in, configured below.
 compose = false
 # Empty: `server run` uses the active interpreter, matching how the backend's
 # requirements are installed (see README). A stray server/.venv must not
@@ -52,8 +54,35 @@ venv = ""
 [server.scripts]
 dev    = { cmd = ["bash", "scripts/build.sh", "dev"], help = "dev stack in Docker (port 8000, no Caddy)" }
 build  = { cmd = ["bash", "scripts/build.sh"],        help = "production stack in Docker (Caddy + TLS)" }
-deploy = { cmd = ["bash", "scripts/deploy.sh"],       help = "rsync server/ to the remote and restart it" }
 backup = { cmd = ["bash", "scripts/backup.sh"],       help = "back up the local ~/.chords data directory" }
+
+[server.deploy]
+# The address of the server is not in this repo: it lives in the gitignored
+# server/.deploy-target, read at deploy time.
+#   echo 'user@example.com' > server/.deploy-target
+host_file    = ".deploy-target"
+dir          = "~/chords"
+compose_file = "docker/docker-compose.yml"
+# A bind mount outside the deploy directory, so redeploying — or deleting
+# ~/chords outright — cannot touch the data. Backups are zips of the whole
+# thing, which is a real restore point: stop, unpack over it, start.
+data_dir     = "~/.chords"
+backup_dir   = "~/.chords-backup"
+# The image COPYs the source in and bind-mounts nothing but the data, so the
+# build (Node deps + a Playwright Chromium) can run with the old container still
+# serving. Downtime is the stop/backup/start swap, not the build.
+build_first  = true
+# Optional fast Debian mirror for the in-image apt steps. Unset = the image's
+# stock deb.debian.org, which always works. Set it to a mirror THIS server can
+# reach, for speed:
+#   APT_MIRROR=mirror.hetzner.com python butler.py server deploy
+# Hetzner's internal mirror is fast and free but reachable only from some
+# Hetzner networks (not Hetzner Cloud / firewalled hosts). Confirm first:
+#   ssh <remote> 'curl -fsI http://mirror.hetzner.com/debian/packages/dists/trixie/InRelease'
+build_env    = ["APT_MIRROR"]
+# The rsync is --delete, so anything not listed here is mirrored to the remote.
+# The data directory needs no exclude: it isn't inside server/.
+exclude      = [".git/", ".venv/", "__pycache__/", "*.pyc", ".pytest_cache/"]
 
 # --------------------------------------------------------------------------- #
 # extension — one source tree, Chrome and Firefox bundles

@@ -6,7 +6,8 @@ services:
       dockerfile: docker/Dockerfile
       args:
         # Fast Debian mirror for the image build; empty = default Debian CDN.
-        # deploy.sh sets this to Hetzner's internal mirror on the remote.
+        # `butler.py server deploy` forwards $APT_MIRROR from your shell
+        # (see build_env in butler/butler.toml).
         APT_MIRROR: ${APT_MIRROR:-}
     volumes:
       - ${HOME}/.chords:/chords-data

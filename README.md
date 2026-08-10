@@ -31,7 +31,7 @@ chords/
 │   ├── frontend/     React single-page app (precompiled JSX, vendored React)
 │   ├── caddy/        Caddy reverse proxy (automatic HTTPS) for production
 │   ├── docker/       Dockerfile + docker-compose for dev and prod
-│   └── scripts/      build / deploy / backup helpers
+│   └── scripts/      build / backup / frontend-compile helpers
 ├── app/              Tauri v2 wrapper — native desktop & mobile builds
 ├── extension/        Chrome + Firefox (MV3) "Chords Importer" extension
 ├── butler.py         task runner for every component — a shim over the shared
@@ -144,7 +144,8 @@ use it prepares a cached virtualenv holding the shared
 that file) and then hands off to it. Nothing to install by hand; the first run
 just needs network access. What chords itself declares lives in
 `butler/butler.toml`; what only chords does (the OpenRouter key workflow, the
-import-pipeline tests) lives in `butler/butler_tasks.py`.
+import-pipeline tests, the two ends of a deploy) lives in
+`butler/butler_tasks.py`.
 
 Run `python butler.py doctor` on a new machine to see what tooling is present.
 
@@ -223,10 +224,25 @@ See `python butler.py --help` for the full list of components and actions.
 
 ## Deployment
 
-`python butler.py server deploy` rsyncs `server/` to the configured remote and
-restarts the production Docker stack. Caddy terminates TLS and reverse-proxies
-the backend; data lives in `~/.chords` on the host (`butler.py server backup`
-snapshots it).
+`python butler.py server deploy` compiles the frontend, rsyncs `server/` to the
+remote, builds the new image **while the old container keeps serving**, then
+stops, snapshots `~/.chords` to `~/.chords-backup`, and starts the new one — so
+the downtime is the swap, not the build. It prints the admin login when it's
+done. Caddy terminates TLS and reverse-proxies the backend.
+
+The remote is read from `server/.deploy-target` (gitignored — a server address
+does not belong in a public repo):
+
+```bash
+echo 'user@example.com' > server/.deploy-target
+python butler.py server deploy
+python butler.py -n server deploy       # print every step, run none of them
+APT_MIRROR=mirror.hetzner.com python butler.py server deploy   # faster apt in the image build
+```
+
+Everything above is the harness's built-in deploy, configured in
+`butler/butler.toml`; only the frontend compile, the API key and the admin-login
+print are chords-specific (`butler/butler_tasks.py`).
 
 ## License
 

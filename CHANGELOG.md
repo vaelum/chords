@@ -45,6 +45,19 @@ GitHub Release body — so keep these sections accurate before tagging.
   deploy; with no value it prompts with hidden input, and it defaults to
   `$OPENROUTER_API_KEY` when that is set. A deploy to a remote with no key
   configured now warns and offers to set one.
+- **Deploying is now the butler harness's built-in** (harness v0.4.0), not
+  `server/scripts/deploy.sh` — that script is gone, and what it did is declared
+  in `butler/butler.toml`. Same sequence as before: compile the frontend, rsync,
+  build the image while the old container keeps serving, then stop, snapshot
+  `~/.chords` to `~/.chords-backup`, and start. What changed:
+  - the pre-deploy check that `zip` is installed now runs *before* the service
+    goes down, rather than the backup failing after it;
+  - `~/.chords` is created before the stack starts, so a first deploy can't end
+    up with a root-owned bind mount the service can't write to;
+  - the admin passcode printed at the end is read using the *remote's* home
+    directory. The old script interpolated the local `$HOME` into the ssh
+    command, so it only worked when both usernames matched;
+  - snapshots are named `chords-<stamp>.zip` (was `chords_<stamp>.zip`).
 - **`python butler.py server test`** runs the import-pipeline tests in
   `server/tests/`: an offline suite driving the real code against a stub
   OpenRouter server (free), and `--live` for a suite that hits the real API
