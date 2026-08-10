@@ -8,7 +8,7 @@ Each released version below has a `## [x.y.z]` heading. The release workflow
 extracts the section matching the pushed tag (`vx.y.z`) and uses it as the
 GitHub Release body — so keep these sections accurate before tagging.
 
-## [Unreleased]
+## [2026.8.2]
 
 ### Changed
 
