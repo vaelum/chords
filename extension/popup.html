@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="theme.css" />
+    <style>
+      body { width: 400px; padding: 16px; }
+      body.windowed { width: auto; min-width: 400px; }
+
+      .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+      .header .tools { display: flex; gap: 4px; }
+
+      .section-head { margin-bottom: 14px; }
+      .section-head .title { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
+      .section-head .sub { font-size: 13px; color: var(--muted-foreground); margin-top: 2px; }
+
+      /* segmented switch (ported from app) */
+      .seg-switch { display: flex; border: 1px solid var(--border); border-radius: var(--radius);
+        overflow: hidden; background: var(--card); margin-bottom: 14px; }
+      .seg-item { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+        height: 36px; font-size: 13px; font-weight: 500; border: 0; border-left: 1px solid var(--border);
+        background: transparent; color: var(--muted-foreground); cursor: pointer; }
+      .seg-item:first-child { border-left: 0; }
+      .seg-item:hover:not(.on) { background: var(--accent); color: var(--foreground); }
+      .seg-item.on { background: var(--primary); color: var(--primary-foreground); }
+
+      .hide { display: none !important; }
+
+      .entry-row { display: flex; gap: 8px; }
+      .entry-row .input { flex: 1; }
+
+      .divider { display: flex; align-items: center; gap: 10px; margin: 12px 0; }
+      .divider .line { flex: 1; height: 1px; background: var(--border); }
+      .divider span { font-size: 12px; color: var(--muted-foreground); }
+
+      .target-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      .target-card { text-align: left; cursor: pointer; padding: 10px;
+        border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--card); color: var(--foreground); font-family: inherit; }
+      .target-card.on { border-color: var(--primary); background: color-mix(in oklab, var(--primary) 10%, var(--card)); }
+      .target-card .tt { font-weight: 600; font-size: 12px; }
+      .target-card .td { font-size: 10px; color: var(--muted-foreground); margin-top: 2px; }
+
+      .sel-bar { display: flex; align-items: center; justify-content: space-between; margin: 12px 0 8px; }
+      .sel-list { display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow: auto; }
+      .sel-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+        border: 1px solid var(--border); border-radius: var(--radius); background: var(--card);
+        cursor: pointer; text-align: left; width: 100%; font-family: inherit; color: var(--foreground); }
+      .sel-row.off { opacity: 0.5; }
+      .sel-row .box { width: 18px; height: 18px; flex: 0 0 auto; border-radius: 5px;
+        border: 1px solid var(--border); display: grid; place-items: center; }
+      .sel-row.on .box { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); }
+      .sel-row .ti { font-weight: 600; font-size: 13px; }
+      .sel-row .ar { font-size: 12px; color: var(--muted-foreground); }
+
+      .stack { display: flex; flex-direction: column; gap: 12px; }
+      .mt { margin-top: 14px; }
+      .row-end { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+
+      .img-card { display: flex; align-items: center; gap: 12px; padding: 12px; }
+      .img-card img { width: 56px; height: 56px; object-fit: cover; border-radius: var(--radius-sm); flex: 0 0 auto; }
+      .img-card .meta { flex: 1; min-width: 0; }
+      .img-card .meta .n { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+      /* progress log (ported feel) */
+      #progress { margin-top: 14px; }
+      .plog { padding: 10px; border-radius: var(--radius);
+        background: color-mix(in oklab, var(--primary) 6%, var(--card)); border: 1px solid var(--border); }
+      .plog .h { display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+        font-size: 12px; font-weight: 600; color: var(--muted-foreground); }
+      .plog .lines { max-height: 150px; overflow: auto; font-family: var(--font-mono);
+        font-size: 11px; line-height: 1.5; color: var(--muted-foreground); display: flex; flex-direction: column; gap: 2px; }
+      .plog .lines .last { color: var(--foreground); }
+
+      #job { margin-top: 14px; }
+      #job .job-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+      #job .bar { height: 6px; background: var(--muted); border-radius: var(--radius-full); overflow: hidden; }
+      #job .bar > div { height: 100%; background: var(--primary); width: 0; transition: width .25s ease; }
+      #job .log { margin-top: 10px; max-height: 130px; overflow: auto; font-family: var(--font-mono);
+        font-size: 11px; line-height: 1.5; color: var(--muted-foreground); white-space: pre-wrap; }
+
+      .errbox { border: 1px solid var(--destructive); border-radius: var(--radius); padding: 12px; margin-top: 14px; }
+      .errbox .em { color: var(--destructive); font-weight: 600; font-size: 13px; }
+
+      .spin { animation: spin 1s linear infinite; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+
+      /* modal choice dialog */
+      .overlay { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center;
+        padding: 16px; background: rgba(0, 0, 0, 0.5); animation: fadeIn .12s ease; }
+      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+      .modal { width: 100%; max-width: 320px; background: var(--popover); color: var(--popover-foreground);
+        border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); padding: 18px; }
+      .modal .m-title { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+      .modal .m-msg { font-size: 13px; color: var(--muted-foreground); margin: 6px 0 14px; line-height: 1.5; }
+      .modal .m-actions { display: flex; flex-direction: column; gap: 8px; }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <div class="brand">
+        <img src="assets/icon.svg" alt="" />
+        <span class="name">chords<span class="dim"> importer</span></span>
+      </div>
+      <div class="tools">
+        <button class="btn btn-ghost btn-sm" id="openWindow" title="Open in window" hidden>⤢</button>
+        <button class="btn btn-ghost btn-sm" id="opts">Settings</button>
+      </div>
+    </div>
+
+    <div class="section-head">
+      <div class="title">Import</div>
+      <div class="sub" id="subText">Paste a link or describe what you're looking for.</div>
+    </div>
+
+    <div class="seg-switch">
+      <button class="seg-item on" id="segWeb" data-mode="web">Web</button>
+      <button class="seg-item" id="segText" data-mode="textimage">Text or image</button>
+    </div>
+
+    <div id="errbox" class="errbox hide"><div class="em" id="errmsg"></div></div>
+
+    <!-- WEB MODE -->
+    <div id="tabWeb">
+      <div class="entry-row">
+        <input class="input" id="entry" placeholder="Paste a URL, or type “Wonderwall Oasis acoustic”" />
+        <button class="btn btn-primary" id="go">Go</button>
+      </div>
+      <div class="helper">Detects automatically: a single song, a playlist/collection, or a web search.</div>
+
+      <div id="candidates" class="stack mt hide"></div>
+      <div id="playlistSel" class="hide"></div>
+    </div>
+
+    <!-- TEXT / IMAGE MODE -->
+    <div id="tabText" class="hide">
+      <label class="label">Paste chords + lyrics</label>
+      <textarea class="textarea" id="pasted" placeholder="Paste a chord chart here…"></textarea>
+
+      <div class="divider"><div class="line"></div><span>or upload an image</span><div class="line"></div></div>
+
+      <div id="imagePick">
+        <label class="btn btn-outline btn-block">
+          Choose image
+          <input type="file" accept="image/*" id="imageInput" hidden />
+        </label>
+      </div>
+      <div id="imageCard" class="card img-card hide">
+        <img id="imageThumb" alt="" />
+        <div class="meta"><div class="n" id="imageName"></div><div class="t-muted" id="imageType"></div></div>
+        <button class="btn btn-ghost btn-sm" id="imageRemove">Remove</button>
+      </div>
+
+      <div class="row-end">
+        <button class="btn btn-primary" id="convert">Convert to song</button>
+        <span class="helper" style="margin:0" id="convertHint">Pasted text is parsed into chords.</span>
+      </div>
+    </div>
+
+    <!-- shared: single-song preview -->
+    <div id="preview" class="hide"></div>
+
+    <!-- shared: inline progress + background job -->
+    <div id="progress" class="hide"></div>
+    <div id="job"></div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

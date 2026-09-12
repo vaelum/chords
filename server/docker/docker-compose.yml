@@ -1,0 +1,68 @@
+services:
+  chords:
+    container_name: chords
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        # Fast Debian mirror for the image build; empty = default Debian CDN.
+        # `butler.py server deploy` forwards $APT_MIRROR from your shell
+        # (see build_env in butler/butler.toml).
+        APT_MIRROR: ${APT_MIRROR:-}
+    volumes:
+      - ${HOME}/.chords:/chords-data
+      # The Playwright profile lives OUTSIDE the data directory on purpose: the
+      # deploy backup zips all of /chords-data, and this is a disposable
+      # Chromium cache that was making every backup ~4x bigger (11MB -> 47MB).
+      # A named volume so it still survives redeploys and keeps anti-bot
+      # clearance cookies; losing it only costs a slower first import.
+      - chords_browser_profile:/chords-browser-profile
+    environment:
+      CHORDS_DATA_DIR: /chords-data
+      # AI import key. Normally left empty here and read from
+      # /chords-data/secrets.json instead (set it with
+      # `python butler.py server key`); this passthrough is for one-off overrides.
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      CHORDS_BROWSER_PROFILE_DIR: /chords-browser-profile
+      # Empty on purpose. The default is "chrome", but this image installs only
+      # the bundled Chromium (see the Dockerfile), so that default is a
+      # guaranteed failed launch attempt on every cold start and the
+      # bot-detection benefit it exists for never materialises here.
+      CHORDS_BROWSER_CHANNEL: ""
+      # Bounds on the browser: close it after 10 minutes idle, and never more
+      # than 2 tabs at once. This box has 2 vCPUs shared with other services,
+      # and an unbounded number of concurrent Chromium renderers is what would
+      # starve them. Raise MAX_PAGES if imports feel queued too often.
+      CHORDS_BROWSER_IDLE_TIMEOUT: "600"
+      CHORDS_BROWSER_MAX_PAGES: "2"
+    networks:
+      - edge
+    # A guardrail, not a tuning knob: it caps the blast radius of a runaway
+    # import so it cannot take the rest of the box down with it.
+    mem_limit: 1500m
+    restart: unless-stopped
+
+volumes:
+  chords_browser_profile:
+
+# The reverse proxy is deliberately NOT in this file.
+#
+# It runs as its own stack on the production host because the same
+# Caddy also fronts other services: with the proxy inside this stack, every
+# `butler.py server deploy` took TLS down for everything else the box serves.
+# Now a deploy stops only the chords container, and Caddy rides it out — see
+# lb_try_duration in caddy/Caddyfile.
+#
+# The two stacks meet on this network, which is created outside compose because
+# neither owns it:
+#
+#     docker network create edge
+#
+# scripts/build.sh does that for you locally. For a local production run with
+# Caddy in front, add the overlay that still defines it:
+#
+#     docker compose -f docker/docker-compose.yml \
+#                    -f docker/docker-compose.caddy.yml up
+networks:
+  edge:
+    external: true
