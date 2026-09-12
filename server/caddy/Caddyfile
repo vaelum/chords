@@ -1,0 +1,9 @@
+{$CHORDS_DOMAIN} {
+    reverse_proxy chords:8000 {
+        # A redeploy stops and restarts the chords container while Caddy stays
+        # up. Without this, every request in that window is an immediate 502;
+        # with it they wait for the new container instead, so the swap costs
+        # latency rather than errors.
+        lb_try_duration 30s
+    }
+}

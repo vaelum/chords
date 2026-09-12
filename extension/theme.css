@@ -1,0 +1,193 @@
+/* Chords design system — tokens + components, trimmed for the extension.
+   Mirrors frontend/colors_and_type.css and the .btn/.input/.card/.badge rules
+   in frontend/app.css so the extension looks like the app. Dark theme only. */
+
+@font-face {
+  font-family: "Geist";
+  src: url("./fonts/Geist-Variable.ttf") format("truetype-variations"),
+       url("./fonts/Geist-Variable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("./fonts/GeistMono-Variable.ttf") format("truetype-variations"),
+       url("./fonts/GeistMono-Variable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* zinc-dark surfaces */
+  --background: #09090b;
+  --foreground: #fafafa;
+  --card: #09090b;
+  --card-foreground: #fafafa;
+  --popover: #09090b;
+  --popover-foreground: #fafafa;
+  --secondary: #27272a;
+  --secondary-foreground: #fafafa;
+  --muted: #27272a;
+  --muted-foreground: #a1a1aa;
+  --accent: #27272a;
+  --accent-foreground: #fafafa;
+  --destructive: #ef4444;
+  --destructive-foreground: #fafafa;
+  --border: #27272a;
+  --input: #27272a;
+  --selection: #355172;
+
+  /* brand accent — chords orange, wins across themes (as in the app) */
+  --primary: #f97316;
+  --primary-foreground: #ffffff;
+  --ring: #f97316;
+
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / .10), 0 2px 4px -2px rgb(0 0 0 / .10);
+
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+               Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+               Consolas, "Liberation Mono", monospace;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+}
+::selection { background: var(--selection); color: var(--foreground); }
+
+/* ---- typography helpers (subset) ---- */
+.t-h4    { font-size: 16px; font-weight: 600; letter-spacing: -0.02em; margin: 0; }
+.t-small { font-size: 14px; font-weight: 500; line-height: 1; margin: 0; }
+.t-muted { font-size: 13px; font-weight: 400; line-height: 1.45; color: var(--muted-foreground); margin: 0; }
+.t-code  { font-family: var(--font-mono); font-size: 12px; background: var(--muted);
+           color: var(--foreground); padding: 2px 6px; border-radius: var(--radius-sm); }
+
+/* ---- buttons (ported from app.css) ---- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font-family: inherit; font-size: 14px; font-weight: 500;
+  height: 36px; padding: 0 14px;
+  border-radius: var(--radius); border: 1px solid transparent;
+  cursor: pointer; user-select: none; line-height: 1; white-space: nowrap;
+  transition: background-color .12s ease, color .12s ease, border-color .12s ease, opacity .12s ease;
+}
+.btn:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn-primary { background: var(--primary); color: var(--primary-foreground); }
+.btn-primary:hover:not(:disabled) { opacity: .9; }
+.btn-secondary { background: var(--secondary); color: var(--secondary-foreground); }
+.btn-secondary:hover:not(:disabled) { background: color-mix(in oklab, var(--secondary) 80%, var(--foreground)); }
+.btn-outline { background: transparent; color: var(--foreground); border-color: var(--border); }
+.btn-outline:hover:not(:disabled) { background: var(--accent); }
+.btn-ghost { background: transparent; color: var(--foreground); }
+.btn-ghost:hover:not(:disabled) { background: var(--accent); }
+.btn-destructive { background: var(--destructive); color: var(--destructive-foreground); }
+.btn-destructive:hover:not(:disabled) { opacity: .9; }
+.btn-sm { height: 30px; padding: 0 10px; font-size: 13px; }
+.btn-block { width: 100%; }
+
+/* ---- inputs ---- */
+.label { font-size: 13px; font-weight: 500; display: block; margin-bottom: 6px; }
+.helper { font-size: 12px; color: var(--muted-foreground); margin-top: 6px; }
+.input {
+  font-family: var(--font-sans); font-size: 14px;
+  height: 36px; padding: 0 12px;
+  border-radius: var(--radius); border: 1px solid var(--input);
+  background: var(--background); color: var(--foreground); width: 100%;
+}
+.input::placeholder { color: var(--muted-foreground); }
+.input:focus { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+/* ---- card ---- */
+.card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 14px;
+}
+
+/* ---- badge ---- */
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 500; line-height: 1;
+  padding: 4px 9px; border-radius: var(--radius-full);
+  border: 1px solid transparent;
+}
+.badge-secondary { background: var(--secondary); color: var(--secondary-foreground); }
+.badge-outline { background: transparent; color: var(--foreground); border-color: var(--border); }
+.badge-destructive { background: var(--destructive); color: var(--destructive-foreground); }
+.badge-soft { background: var(--muted); color: var(--muted-foreground); }
+
+/* ---- textarea ---- */
+.textarea {
+  font-family: var(--font-mono); font-size: 13px; line-height: 1.55;
+  padding: 12px; border-radius: var(--radius); border: 1px solid var(--input);
+  background: var(--background); color: var(--foreground);
+  width: 100%; resize: vertical; min-height: 130px;
+}
+.textarea:focus { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+/* ---- mode cards (ported from the app's import-modes) ---- */
+.mode-cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.mode-card {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 12px 8px; cursor: pointer;
+  background: var(--card); color: var(--foreground);
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  font-family: inherit; font-size: 12px; font-weight: 500;
+  transition: border-color .12s ease, background-color .12s ease;
+}
+.mode-card:hover { background: var(--accent); }
+.mode-card.active { border-color: var(--primary); color: var(--primary); }
+.mode-card svg { width: 18px; height: 18px; }
+
+/* ---- field / stack / row ---- */
+.stack { display: flex; flex-direction: column; gap: 12px; }
+.field { display: flex; flex-direction: column; }
+.row { display: flex; gap: 8px; }
+.row .grow { flex: 1; }
+
+/* ---- candidate / song rows ---- */
+.list { display: flex; flex-direction: column; gap: 8px; }
+.song-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border: 1px solid var(--border);
+  border-radius: var(--radius); background: var(--card);
+}
+.song-row .meta { flex: 1; min-width: 0; }
+.song-row .meta .title { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.song-row .meta .sub { font-size: 12px; color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.song-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--primary); flex: 0 0 auto; }
+
+/* ---- extracted preview ---- */
+.preview .pv-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.preview .pv-title { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.preview .pv-artist { font-size: 13px; color: var(--muted-foreground); }
+.preview .pv-body {
+  font-family: var(--font-mono); font-size: 11px; line-height: 1.5;
+  color: var(--muted-foreground); white-space: pre-wrap;
+  max-height: 160px; overflow: auto;
+  background: var(--background); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 8px; margin: 10px 0;
+}
+
+/* ---- section label ---- */
+.section-label { font-size: 11px; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--muted-foreground); font-weight: 600; margin: 4px 0; }
+
+/* ---- brand header ---- */
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand img { width: 32px; height: 32px; border-radius: var(--radius-sm); display: block; }
+.brand .name { font-size: 15px; font-weight: 700; letter-spacing: -0.02em; }
+.brand .name .dim { color: var(--muted-foreground); font-weight: 400; }

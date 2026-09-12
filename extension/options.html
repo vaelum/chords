@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="theme.css" />
+    <style>
+      body { max-width: 460px; margin: 32px auto; padding: 0 20px; }
+      .header { margin-bottom: 8px; }
+      .subtitle { margin-bottom: 24px; }
+      .field { margin-top: 18px; }
+      .row { display: flex; gap: 8px; margin-top: 22px; flex-wrap: wrap; }
+      #status { margin-top: 14px; min-height: 1.2em; font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <div class="header brand">
+      <img src="assets/icon.svg" alt="" />
+      <span class="name">chords<span class="dim"> importer</span></span>
+    </div>
+    <p class="subtitle t-muted">Connect the extension to your Chords backend.</p>
+
+    <div class="field">
+      <label class="label" for="siteUrl">Site URL</label>
+      <input class="input" id="siteUrl" placeholder="https://chords.example" />
+      <div class="helper">
+        Where the Chords app is served (it proxies <span class="t-code">/api</span>),
+        e.g. <span class="t-code">http://localhost:8000</span>.
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="label" for="token">Auth token</label>
+      <input class="input" id="token" placeholder="JWT (without the word Bearer)" />
+      <div class="helper">
+        Your JWT. Easiest: log into the app in a tab, then click
+        “Grab token from app tab”.
+      </div>
+    </div>
+
+    <div class="row">
+      <button class="btn btn-primary" id="save">Save</button>
+      <button class="btn btn-outline" id="grab">Grab token from app tab</button>
+    </div>
+    <div id="status"></div>
+
+    <script src="options.js"></script>
+  </body>
+</html>

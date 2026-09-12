@@ -1,0 +1,106 @@
+# butler configuration for chords.
+#
+# `python butler.py --help` shows what this file produced; `doctor` says whether
+# the tooling for it is installed. Anything this file can't express lives in
+# butler_tasks.py.
+
+[project]
+name = "chords"
+dist = "dist"
+
+# --------------------------------------------------------------------------- #
+# app — Tauri desktop + Android
+# --------------------------------------------------------------------------- #
+
+[app]
+kind = "tauri"
+dir  = "app"
+# The master art is shared with the web frontend, so it lives outside app/.
+icon_source = "server/frontend/assets/png/chords-icon-1024.png"
+
+[app.android]
+key_name = "chords"
+# The keystore lives in <$ANDROID_KEYSTORE_VAULT|~/Documents/important>/chords/,
+# outside any repo. Without a vault butler falls back to app/.android so the
+# repo still builds, and says so.
+dname = "CN=chords, OU=chords, O=chords, C=DE"
+# Pinned to match CI (.forgejo/runner-image/playbook.yml), so a local build mirrors the
+# released APK. Install it with:
+#   sdkmanager "ndk;26.3.11579264" "platforms;android-34" "build-tools;34.0.0"
+ndk_version = "26.3.11579264"
+# chords talks to an HTTPS backend, so neither of these is needed.
+cleartext = false
+split_abi = false
+
+# --------------------------------------------------------------------------- #
+# server — FastAPI behind Caddy
+# --------------------------------------------------------------------------- #
+
+[server]
+kind    = "fastapi"
+dir     = "server"
+module  = "backend.main:app"
+port    = 8000
+service = "chords"
+# The local stack is built by server/scripts/build.sh (Caddy, TLS, the frontend
+# build), not by a bare `docker compose up` — see [server.scripts]. Deploying is
+# the built-in, configured below.
+compose = false
+# Empty: `server run` uses the active interpreter, matching how the backend's
+# requirements are installed (see README). A stray server/.venv must not
+# silently become the thing that runs.
+venv = ""
+
+[server.scripts]
+dev    = { cmd = ["bash", "scripts/build.sh", "dev"], help = "dev stack in Docker (port 8000, no Caddy)" }
+build  = { cmd = ["bash", "scripts/build.sh"],        help = "production stack in Docker (Caddy + TLS, local only)" }
+backup = { cmd = ["bash", "scripts/backup.sh"],       help = "back up the local ~/.chords data directory" }
+
+[server.deploy]
+# The address of the server is not in this repo: it lives in the gitignored
+# server/.deploy-target, read at deploy time.
+#   echo 'user@example.com' > server/.deploy-target
+host_file    = ".deploy-target"
+dir          = "~/chords"
+# The BASE file only — it has no Caddy in it. On the deploy host the reverse
+# proxy is a separate, longer-lived stack that also fronts other
+# services, so a deploy must not stop it: it stops the chords container and
+# nothing else. docker/docker-compose.caddy.yml is the local-only overlay that
+# still brings Caddy up for `server build`, and is deliberately not listed here.
+compose_file = "docker/docker-compose.yml"
+# A bind mount outside the deploy directory, so redeploying — or deleting
+# ~/chords outright — cannot touch the data. Backups are zips of the whole
+# thing, which is a real restore point: stop, unpack over it, start.
+data_dir     = "~/.chords"
+backup_dir   = "~/.chords-backup"
+# The image COPYs the source in and bind-mounts nothing but the data, so the
+# build (Node deps + a Playwright Chromium) can run with the old container still
+# serving. Downtime is the stop/backup/start swap, not the build.
+build_first  = true
+# Optional fast Debian mirror for the in-image apt steps. Unset = the image's
+# stock deb.debian.org, which always works. Set it to a mirror THIS server can
+# reach, for speed:
+#   APT_MIRROR=mirror.hetzner.com python butler.py server deploy
+# Hetzner's internal mirror is fast and free but reachable only from some
+# Hetzner networks (not Hetzner Cloud / firewalled hosts). Confirm first:
+#   ssh <remote> 'curl -fsI http://mirror.hetzner.com/debian/packages/dists/trixie/InRelease'
+build_env    = ["APT_MIRROR"]
+# The rsync is --delete, so anything not listed here is mirrored to the remote.
+# The data directory needs no exclude: it isn't inside server/.
+exclude      = [".git/", ".venv/", "__pycache__/", "*.pyc", ".pytest_cache/"]
+
+# --------------------------------------------------------------------------- #
+# extension — one source tree, Chrome and Firefox bundles
+# --------------------------------------------------------------------------- #
+
+[extension]
+dir      = "extension"
+artifact = "chords-extension"
+
+[extension.firefox]
+# Stable, so storage/state survive updates and Mozilla can sign the add-on
+# later. Email-style ids are valid AMO ids.
+id = "chords-importer@vaelum.de"
+# The current ESR baseline. MV3 with an event-page background and the scripting
+# API is stable well before this.
+min_version = "115.0"
