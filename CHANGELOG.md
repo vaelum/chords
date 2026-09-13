@@ -9,6 +9,38 @@ extracts the section matching the pushed tag (`vx.y.z`) and uses it as the
 release body, on Forgejo and then on GitHub — so keep these sections accurate
 before tagging.
 
+## [2026.9.2]
+
+Nothing in the app, the server or the extension changed in this release: the
+five downloads are the same software as 2026.9.1, rebuilt. What changed is how
+they are built and published.
+
+### Changed
+
+- **One build machine per target.** The four release builds shared a single CI
+  image and a single matrix job whose every step was guarded by a condition on
+  which target it was running. They are four jobs on four images now — the
+  Linux AppImage, the cross-compiled Windows installer, the signed Android APK,
+  and the extension zips, which need no toolchain at all and are packaged on a
+  small image carrying little more than Python. Each job checks the tools it
+  expects before it starts building, so an image that has drifted from the
+  workflow says which tool is missing rather than failing halfway through a
+  build.
+
+- **The GitHub release is copied from the build, not rebuilt here.** Releases
+  are built where development happens and then mirrored onto the public tag —
+  assets, notes and the pre-release flag — by the shared project harness
+  (`butler/butler.toml`), which replaces the export script this repository used
+  to carry. The five files attached to a release, and the tags they hang on,
+  are unchanged.
+
+### Removed
+
+- The README's "Contributing" section. It described how a pull request against
+  a generated mirror is applied upstream — which is still true, and is what the
+  2026.9.1 note above says; repeating it under a heading that invites patches
+  was promising a workflow this repository cannot offer directly.
+
 ## [2026.9.1]
 
 ### Changed
