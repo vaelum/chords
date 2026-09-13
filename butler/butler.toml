@@ -104,3 +104,24 @@ id = "chords-importer@vaelum.de"
 # The current ESR baseline. MV3 with an event-page background and the scripting
 # API is stable well before this.
 min_version = "115.0"
+
+# --------------------------------------------------------------------------- #
+# publish — Copybara export to the public GitHub mirror
+# --------------------------------------------------------------------------- #
+
+# The public repo (github.com/vaelum/chords) is generated from this one; never
+# commit to it directly. `butler.py publish check` says what would ship.
+#
+# No `exclude` here: everything chords holds back is already in the harness
+# baseline (*-PLAN.md, .forgejo/**, and the export machinery itself). The
+# history-rewriting transformations the old copy.bara.sky carried are gone with
+# the history they rewrote — main is one squashed commit.
+#
+# `release = true`: a v* tag runs .forgejo/workflows/build.yml, which publishes
+# a Forgejo release with the AppImage, the Windows installer, the signed APK
+# and both extension zips attached. The mirror has no CI — the workflow is one
+# of the things the export holds back — so `publish --tag` copies that release
+# onto the public tag rather than building it again. The order is:
+#
+#   git push origin main v1.2.3     # wait for the build to publish its release
+#   python butler.py publish --tag v1.2.3

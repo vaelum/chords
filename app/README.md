@@ -51,7 +51,7 @@ build with `APPIMAGE_EXTRACT_AND_RUN=1 NO_STRIP=1`. The repo's [`butler.py`](../
 Windows support is wired up but **has not been tested yet** — expect rough edges.
 
 **From Linux** — how CI builds the released installer (see `.forgejo/workflows/build.yml`;
-the toolchain is in `.forgejo/runner-image/playbook.yml`):
+the toolchain is in `.forgejo/runner-images/chords-windows/playbook.yml`):
 1. Install `nsis`, `clang`, `lld` and `llvm` (for `clang-cl`, `lld-link`, `llvm-rc`),
    then `rustup target add x86_64-pc-windows-msvc` and `cargo install --locked cargo-xwin`.
 2. From `app/`: `cargo tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc --bundles nsis`
@@ -67,8 +67,8 @@ the toolchain is in `.forgejo/runner-image/playbook.yml`):
 
 ## Android ⚠️ (Android Studio install; mirrors the CI build in `.forgejo/workflows/build.yml`)
 The local build is set up to mirror CI exactly — **same pinned versions** as the
-CI runner image (`.forgejo/runner-image/playbook.yml`) that the `android-apk` job
-runs on: **JDK 17**, **NDK `26.3.11579264`**, **`platforms;android-34`**,
+CI runner image (`.forgejo/runner-images/chords-android/playbook.yml`) that the
+`android-apk` job runs on: **JDK 17**, **NDK `26.3.11579264`**, **`platforms;android-34`**,
 **`build-tools;34.0.0`**.
 
 This machine uses **Android Studio** (JetBrains Toolbox), so its SDK lives at

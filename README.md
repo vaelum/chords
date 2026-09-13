@@ -244,14 +244,6 @@ Everything above is the harness's built-in deploy, configured in
 `butler/butler.toml`; only the frontend compile, the API key and the admin-login
 print are chords-specific (`butler/butler_tasks.py`).
 
-## Contributing
-
-This GitHub repository is generated: development happens in a private
-repository, and every commit here is an automated export of it (the
-`GitOrigin-RevId:` line at the end of each message names the source commit).
-Issues and pull requests are welcome, but a pull request is applied upstream
-and arrives back here with the next export, rather than being merged directly.
-
 ## License
 
 [MIT](LICENSE)
