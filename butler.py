@@ -34,7 +34,7 @@ from pathlib import Path
 # where the SSH key a developer already pushes with just works. :2222 is the
 # port Forgejo publishes (the host's own sshd owns :22).
 HARNESS_URL = "git+https://github.com/vaelum/butler-harness.git"
-HARNESS_REF = "v0.6.5"
+HARNESS_REF = "v0.6.6"
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 
