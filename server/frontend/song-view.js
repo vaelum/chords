@@ -436,6 +436,17 @@ function SongView({
     setLocBody(null);
   }, [song.id]);
 
+  // Key/capo/tempo/body render straight off the `song` prop, so a collaborator's
+  // edit repaints them on its own. Speed doesn't — it's local state, and the
+  // reset above is keyed on song.id, which doesn't change when the song we're
+  // already looking at is edited elsewhere. Track the stored value separately so
+  // a remote change moves this device's slider too. Our own taps call setSpeed
+  // before the PUT, so this lands on a value it already holds and React bails.
+  useEffectSV(() => {
+    if (song.scrollSpeed == null) return;
+    setSpeed(song.scrollSpeed);
+  }, [song.scrollSpeed]);
+
   // Keep the screen awake while a song is open (Screen Wake Lock API). The
   // lock is dropped by the browser when the tab is hidden, so re-acquire it
   // when the page becomes visible again.

@@ -1536,34 +1536,48 @@ function EditorScreen({
   const isPlaylistVersion = !!(song && song.playlistId);
   const playlist = isPlaylistVersion ? store.playlists.find(p => p.id === song.playlistId) : null;
   const collabs = playlist ? playlist.collaborators.map(id => window.IT.USERS.find(u => u.id === id)).filter(Boolean) : [];
-  function save() {
+
+  // Await the write before claiming it happened. Firing and forgetting here
+  // used to toast "Updated for everyone" even when the PUT came back 404 — the
+  // editor would close over an edit that never landed.
+  async function save() {
     const tags = draft.tags.split(',').map(t => t.trim()).filter(Boolean);
-    if (song) {
-      store.saveEdit(song.id, {
-        ...draft,
-        tags
-      });
-      if (isPlaylistVersion && playlist) {
-        toast({
-          title: 'Updated for everyone',
-          desc: `${draft.title} · ${collabs.length} ${collabs.length === 1 ? 'collaborator' : 'collaborators'}`,
-          icon: 'users'
+    try {
+      if (song) {
+        await store.saveEdit(song.id, {
+          ...draft,
+          tags
         });
+        if (isPlaylistVersion && playlist) {
+          toast({
+            title: 'Updated for everyone',
+            desc: `${draft.title} · ${collabs.length} ${collabs.length === 1 ? 'collaborator' : 'collaborators'}`,
+            icon: 'users'
+          });
+        } else {
+          toast({
+            title: 'Saved',
+            desc: draft.title
+          });
+        }
       } else {
+        await store.createSong({
+          ...draft,
+          tags
+        });
         toast({
-          title: 'Saved',
+          title: 'Added to library',
           desc: draft.title
         });
       }
-    } else {
-      store.createSong({
-        ...draft,
-        tags
-      });
+    } catch (e) {
+      // Stay in the editor so the draft isn't lost.
       toast({
-        title: 'Added to library',
-        desc: draft.title
+        title: "Couldn't save",
+        desc: e.message || String(e),
+        tone: 'destructive'
       });
+      return;
     }
     onSaved && onSaved();
   }
