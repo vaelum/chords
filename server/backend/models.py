@@ -44,7 +44,9 @@ class Song(Base):
     capo = Column(Integer, default=0)
     tempo = Column(Integer, default=90)
     body = Column(Text, default="")
-    scroll_speed = Column(Float, default=1.0)
+    # Autoscroll pace. The song view shows this doubled ("1.0x" on screen is
+    # 0.5 stored), so this default is the 1.0x the slider starts at.
+    scroll_speed = Column(Float, default=0.5)
     playlist_id = Column(String, ForeignKey("playlists.id"), nullable=True)
     
     updated_at = Column(DateTime(timezone=True), default=_now, onupdate=_now)

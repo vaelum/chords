@@ -128,7 +128,7 @@ class SongCreate(_Base):
     capo: int = 0
     tempo: int = 90
     body: str = ""
-    scroll_speed: float = 1.0
+    scroll_speed: float = 0.5
     tags: List[str] = []
 
 
@@ -152,7 +152,7 @@ class SongOut(_Base):
     capo: int
     tempo: int
     body: str
-    scroll_speed: float = 1.0
+    scroll_speed: float = 0.5
     playlist_id: Optional[str]
     updated_at: datetime
     tags: List[str] = []
@@ -230,7 +230,7 @@ class PublicSongOut(_Base):
     capo: int
     tempo: int
     body: str
-    scroll_speed: float = 1.0
+    scroll_speed: float = 0.5
     tags: List[str] = []
 
     @field_validator("tags", mode="before")
@@ -273,7 +273,7 @@ class PortableSong(_Base):
     capo: int = 0
     tempo: int = 90
     body: str = ""
-    scroll_speed: float = 1.0
+    scroll_speed: float = 0.5
     tags: List[str] = []
 
 

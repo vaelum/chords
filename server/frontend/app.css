@@ -705,6 +705,57 @@ button { font-family: inherit; }
   background: color-mix(in oklab, var(--foreground) 12%, transparent);
 }
 
+/* Tappable chords. Every chord badge in the song view is a button that opens
+   its fingering diagram, so it has to shed the browser's button chrome while
+   keeping the badge look it had as a span — .chip / .sv-chord-chip still own
+   the font and colour, so nothing here may reset those. */
+.chip-btn {
+  appearance: none; -webkit-appearance: none;
+  border: 0; margin: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.chip-btn:hover { background: color-mix(in oklab, var(--primary) 26%, transparent); }
+.chip-btn:active { transform: translateY(0.5px); }
+.sv-shell[data-chord-color="grey"] .chip-btn:hover {
+  background: color-mix(in oklab, var(--foreground) 22%, transparent);
+}
+.chip-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+
+/* chord fingering popup */
+.chord-popup { min-width: 260px; }
+.chord-quality { font-weight: 500; color: var(--muted-foreground); }
+.chord-voicings { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+.chord-voicing { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.chord-voicing figcaption {
+  font-size: 10px; font-weight: 600; color: var(--muted-foreground);
+  text-transform: uppercase; letter-spacing: .05em; white-space: nowrap;
+}
+.chord-note {
+  margin-top: 12px; font-size: 11px; line-height: 1.5; color: var(--muted-foreground);
+  max-width: 340px;
+}
+.chord-note + .chord-note { margin-top: 4px; }
+
+/* the chord box itself */
+.chord-dg { display: block; overflow: visible; }
+.chord-dg .dg-line { stroke: var(--border); stroke-width: 1; }
+.chord-dg .dg-nut { fill: var(--foreground); }
+.chord-dg .dg-dot { fill: var(--primary); }
+.chord-dg .dg-finger {
+  fill: var(--primary-foreground);
+  font-family: var(--font-sans); font-size: 7px; font-weight: 700;
+}
+.chord-dg .dg-open { fill: none; stroke: var(--muted-foreground); stroke-width: 1.2; }
+.chord-dg .dg-mute line { stroke: var(--muted-foreground); stroke-width: 1.2; }
+.chord-dg .dg-fretlabel {
+  fill: var(--muted-foreground);
+  font-family: var(--font-mono); font-size: 8px; font-weight: 600;
+}
+.sv-shell[data-chord-color="grey"] .chord-dg .dg-dot { fill: var(--foreground); }
+.sv-shell[data-chord-color="grey"] .chord-dg .dg-finger { fill: var(--background); }
+
 /* autoscroll bottom bar — 3-column grid: left | centre | right */
 .autoscroll-bar {
   flex: 0 0 auto;

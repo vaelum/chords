@@ -21,6 +21,10 @@ const FACTOR_MAX = 1.7; // sparse/blank lines never faster than ~170%
 const FACTOR_SMOOTH = 4; // per-second lerp toward the target factor
 const READ_ANCHOR = 0.35; // viewport fraction treated as the line being read
 
+// Autoscroll pace for a song that has never had its speed touched. Stored
+// values are half what the bar displays, so 0.5 is the "1.0x" the controls show.
+const DEFAULT_SCROLL_SPEED = 0.5;
+
 // Constant vs. adaptive (density-aware) autoscroll is a per-device preference.
 const SCROLL_DENSITY_KEY = 'chords.scrollDensity';
 function loadDensityMode() {
@@ -35,7 +39,8 @@ function SongBody({
   body,
   lines: linesProp,
   lyricSize = 16,
-  contentRef
+  contentRef,
+  onChordTap = null
 }) {
   const lines = useMemoSV(() => linesProp || window.IT.parseSong(body || ''), [linesProp, body]);
   return /*#__PURE__*/React.createElement("div", {
@@ -46,11 +51,13 @@ function SongBody({
     }
   }, lines.map((l, i) => /*#__PURE__*/React.createElement(LineView, {
     key: i,
-    line: l
+    line: l,
+    onChordTap: onChordTap
   })));
 }
 function LineView({
-  line
+  line,
+  onChordTap
 }) {
   if (line.type === 'empty') return /*#__PURE__*/React.createElement("div", {
     className: "line lyric",
@@ -64,30 +71,56 @@ function LineView({
   // Bar/progression line ("| [Am] | [F] | x4") — chord chips inline with the
   // bar markers, all on one row (same chip badge style as chords over lyrics).
   if (line.type === 'progression') return /*#__PURE__*/React.createElement(ProgressionLine, {
-    tokens: line.tokens
+    tokens: line.tokens,
+    onChordTap: onChordTap
   });
   // Chord-only lines ('instr') render with the same chord-chip style as
   // chord+lyric lines — the chips sit above blank space instead of literal
   // [C] text.
   return /*#__PURE__*/React.createElement(ChipLine, {
-    tokens: line.tokens
+    tokens: line.tokens,
+    onChordTap: onChordTap
   });
 }
+
+// A chord badge. Given a tap handler it becomes a real button, so the fingering
+// popup is reachable by keyboard as well as by tapping; without one (previews,
+// read-only renders elsewhere) it stays the plain span it has always been.
+function ChordChip({
+  chord,
+  onChordTap
+}) {
+  if (!onChordTap) return /*#__PURE__*/React.createElement("span", {
+    className: "chip"
+  }, chord);
+  return /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "chip chip-btn",
+    "aria-label": `How to play ${chord}`,
+    onClick: e => {
+      e.stopPropagation();
+      onChordTap(chord);
+    }
+  }, chord);
+}
 function ProgressionLine({
-  tokens
+  tokens,
+  onChordTap
 }) {
   return /*#__PURE__*/React.createElement("div", {
     className: "line prog-line"
   }, tokens.map((t, i) => /*#__PURE__*/React.createElement(React.Fragment, {
     key: i
-  }, t.chord && /*#__PURE__*/React.createElement("span", {
-    className: "chip"
-  }, t.chord), t.text && /*#__PURE__*/React.createElement("span", {
+  }, t.chord && /*#__PURE__*/React.createElement(ChordChip, {
+    chord: t.chord,
+    onChordTap: onChordTap
+  }), t.text && /*#__PURE__*/React.createElement("span", {
     className: "prog-text"
   }, t.text))));
 }
 function ChipLine({
-  tokens
+  tokens,
+  onChordTap
 }) {
   const anyChord = tokens.some(t => t.chord);
   return /*#__PURE__*/React.createElement("div", {
@@ -95,11 +128,183 @@ function ChipLine({
   }, tokens.map((t, i) => /*#__PURE__*/React.createElement("span", {
     key: i,
     className: `chip-token ${anyChord && !t.chord ? 'no-chip' : ''}`
-  }, t.chord && /*#__PURE__*/React.createElement("span", {
-    className: "chip"
-  }, t.chord), /*#__PURE__*/React.createElement("span", {
+  }, t.chord && /*#__PURE__*/React.createElement(ChordChip, {
+    chord: t.chord,
+    onChordTap: onChordTap
+  }), /*#__PURE__*/React.createElement("span", {
     className: "lyric"
   }, t.text || '\u00A0'))));
+}
+
+// ---------- chord fingering diagram ----------
+// Standard chord box: the six strings run left (low E) to right (high e), five
+// frets down. window.IT.chordVoicings works out the shapes; this only draws one.
+const DG = {
+  sp: 14,
+  fr: 17,
+  strings: 6,
+  frets: 5,
+  padL: 20,
+  padT: 20,
+  padR: 10,
+  padB: 4
+};
+function ChordDiagram({
+  voicing,
+  width = 112
+}) {
+  const {
+    frets,
+    fingers,
+    barre
+  } = voicing;
+  const fretted = frets.filter(f => f > 0);
+  const highest = fretted.length ? Math.max.apply(null, fretted) : 0;
+  const lowest = fretted.length ? Math.min.apply(null, fretted) : 0;
+  // Everything within the first five frets is drawn against the nut; higher up
+  // the box starts at the shape's lowest fret and says which one that is.
+  const startFret = highest <= DG.frets ? 1 : lowest;
+  const gridW = DG.sp * (DG.strings - 1);
+  const gridH = DG.fr * DG.frets;
+  const w = DG.padL + gridW + DG.padR;
+  const h = DG.padT + gridH + DG.padB;
+  const sx = i => DG.padL + i * DG.sp;
+  const fy = f => DG.padT + (f - startFret + 0.5) * DG.fr;
+  const underBarre = (i, f) => barre && f === barre.fret && i >= barre.from && i <= barre.to;
+  return /*#__PURE__*/React.createElement("svg", {
+    className: "chord-dg",
+    viewBox: `0 0 ${w} ${h}`,
+    width: width,
+    height: width * h / w,
+    role: "img",
+    "aria-hidden": "true",
+    focusable: "false"
+  }, Array.from({
+    length: DG.frets + 1
+  }, (_, i) => /*#__PURE__*/React.createElement("line", {
+    key: `f${i}`,
+    className: "dg-line",
+    x1: DG.padL,
+    x2: DG.padL + gridW,
+    y1: DG.padT + i * DG.fr,
+    y2: DG.padT + i * DG.fr
+  })), startFret === 1 ? /*#__PURE__*/React.createElement("rect", {
+    className: "dg-nut",
+    x: DG.padL - 0.5,
+    y: DG.padT - 3,
+    width: gridW + 1,
+    height: 3.2,
+    rx: 1
+  }) : /*#__PURE__*/React.createElement("text", {
+    className: "dg-fretlabel",
+    x: DG.padL - 9,
+    y: fy(startFret) + 3,
+    textAnchor: "end"
+  }, startFret), Array.from({
+    length: DG.strings
+  }, (_, i) => /*#__PURE__*/React.createElement("line", {
+    key: `s${i}`,
+    className: "dg-line",
+    x1: sx(i),
+    x2: sx(i),
+    y1: DG.padT,
+    y2: DG.padT + gridH
+  })), frets.map((f, i) => {
+    if (f === 0) return /*#__PURE__*/React.createElement("circle", {
+      key: `o${i}`,
+      className: "dg-open",
+      cx: sx(i),
+      cy: DG.padT - 9,
+      r: 3.1
+    });
+    if (f < 0) return /*#__PURE__*/React.createElement("g", {
+      key: `x${i}`,
+      className: "dg-mute"
+    }, /*#__PURE__*/React.createElement("line", {
+      x1: sx(i) - 3,
+      y1: DG.padT - 12,
+      x2: sx(i) + 3,
+      y2: DG.padT - 6
+    }), /*#__PURE__*/React.createElement("line", {
+      x1: sx(i) - 3,
+      y1: DG.padT - 6,
+      x2: sx(i) + 3,
+      y2: DG.padT - 12
+    }));
+    return null;
+  }), barre && /*#__PURE__*/React.createElement("g", null, /*#__PURE__*/React.createElement("rect", {
+    className: "dg-dot",
+    x: sx(barre.from) - 5.2,
+    y: fy(barre.fret) - 5.2,
+    width: sx(barre.to) - sx(barre.from) + 10.4,
+    height: 10.4,
+    rx: 5.2
+  }), /*#__PURE__*/React.createElement("text", {
+    className: "dg-finger",
+    x: sx(barre.from),
+    y: fy(barre.fret) + 2.7,
+    textAnchor: "middle"
+  }, "1")), frets.map((f, i) => f > 0 && !underBarre(i, f) ? /*#__PURE__*/React.createElement("g", {
+    key: `d${i}`
+  }, /*#__PURE__*/React.createElement("circle", {
+    className: "dg-dot",
+    cx: sx(i),
+    cy: fy(f),
+    r: 5.2
+  }), fingers[i] ? /*#__PURE__*/React.createElement("text", {
+    className: "dg-finger",
+    x: sx(i),
+    y: fy(f) + 2.7,
+    textAnchor: "middle"
+  }, fingers[i]) : null) : null));
+}
+
+// Tap a chord anywhere in a song → this. Shows the shapes we know for it:
+// the open voicing first when there is one, then movable barre positions.
+function ChordFingeringPopup({
+  chord,
+  capo,
+  onClose
+}) {
+  const info = useMemoSV(() => window.IT.chordVoicings(chord), [chord]);
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'fixed',
+      inset: 0,
+      zIndex: 49
+    },
+    onClick: onClose
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "sv-center-popup chord-popup"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "sv-center-popup-head"
+  }, /*#__PURE__*/React.createElement("span", null, chord, info && /*#__PURE__*/React.createElement("span", {
+    className: "chord-quality"
+  }, " \xB7 ", info.qualityName)), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-ghost btn-icon btn-sm",
+    onClick: onClose,
+    "aria-label": "Close"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "close",
+    size: 14
+  }))), !info ? /*#__PURE__*/React.createElement("div", {
+    className: "chord-note"
+  }, "No guitar shape for this one.") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "chord-voicings"
+  }, info.voicings.map((v, i) => /*#__PURE__*/React.createElement("figure", {
+    key: i,
+    className: "chord-voicing"
+  }, /*#__PURE__*/React.createElement(ChordDiagram, {
+    voicing: v
+  }), /*#__PURE__*/React.createElement("figcaption", null, v.label)))), /*#__PURE__*/React.createElement("div", {
+    className: "chord-note"
+  }, "Notes \xB7 ", info.voicings[0].notes.join(' ')), info.approximate && /*#__PURE__*/React.createElement("div", {
+    className: "chord-note"
+  }, "Closest shape we know \u2014 the written chord adds notes this one leaves out."), info.bass && !info.bassHandled && /*#__PURE__*/React.createElement("div", {
+    className: "chord-note"
+  }, "Slash chord: play ", info.bass, " in the bass over this shape."), capo > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "chord-note"
+  }, "Capo ", capo, ": fret numbers count from the capo, not the nut."))));
 }
 function shiftKey(key, steps) {
   return window.IT.transposeChord(key, steps);
@@ -130,7 +335,7 @@ function SongView({
   },
   setGaps = null
 }) {
-  const [speed, setSpeed] = useStateSV(song.scrollSpeed || 1.0);
+  const [speed, setSpeed] = useStateSV(song.scrollSpeed || DEFAULT_SCROLL_SPEED);
   // In read-only mode (public share link) key/capo/tempo changes are kept as
   // local-only overrides — they never persist. In normal mode these stay null
   // and the controls write through to the store as before.
@@ -145,6 +350,7 @@ function SongView({
   const [fontPopOpen, setFontPopOpen] = useStateSV(false);
   const [sectionsOpen, setSectionsOpen] = useStateSV(false);
   const [chordsOpen, setChordsOpen] = useStateSV(false);
+  const [fingeringChord, setFingeringChord] = useStateSV(null); // chord whose diagram is open
   const [chordsOverflow, setChordsOverflow] = useStateSV(false);
   const [keyPopOpen, setKeyPopOpen] = useStateSV(false);
   const [capoPopOpen, setCapoPopOpen] = useStateSV(false);
@@ -163,6 +369,7 @@ function SongView({
   const linesHRef = useRefSV(0); // measured height of just the lyric lines (excl. padding)
   const factorRef = useRefSV(1); // smoothed density speed factor
   const densityModeRef = useRefSV(densityMode); // read live in the rAF tick
+  const fingeringRef = useRefSV(null); // same, for the Escape key handler
   const toast = useToast();
   const [menuEl, setMenuEl] = useStateSV(null);
 
@@ -221,7 +428,8 @@ function SongView({
   useEffectSV(() => {
     setAutoscroll(false);
     setCountIn(false);
-    setSpeed(song.scrollSpeed || 1.0);
+    setSpeed(song.scrollSpeed || DEFAULT_SCROLL_SPEED);
+    setFingeringChord(null);
     setLocKey(null);
     setLocCapo(null);
     setLocTempo(null);
@@ -338,9 +546,11 @@ function SongView({
         rafRef.current = requestAnimationFrame(tick);
         return;
       }
-      // Paused by a manual scroll — keep ticking but don't advance, and keep
-      // the clock fresh so we don't lurch when auto resumes.
-      if (pausedRef.current) {
+      // Paused by a manual scroll, or by an open chord diagram (you tapped a
+      // chord to read it, so the song shouldn't run out from under it) — keep
+      // ticking but don't advance, and keep the clock fresh so we don't lurch
+      // when auto resumes.
+      if (pausedRef.current || fingeringRef.current) {
         lastTsRef.current = ts;
         rafRef.current = requestAnimationFrame(tick);
         return;
@@ -457,6 +667,9 @@ function SongView({
     };
   }, [autoscroll]);
   useEffectSV(() => {
+    fingeringRef.current = fingeringChord;
+  }, [fingeringChord]);
+  useEffectSV(() => {
     const h = e => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
       if (e.key === ' ') {
@@ -465,7 +678,10 @@ function SongView({
       }
       if (e.key === '+' || e.key === '=') handleTranspose(1);
       if (e.key === '-') handleTranspose(-1);
-      if (e.key === 'Escape') onBack();
+      // Escape dismisses the chord diagram if one is up, and only then leaves.
+      if (e.key === 'Escape') {
+        if (fingeringRef.current) setFingeringChord(null);else onBack();
+      }
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
@@ -497,6 +713,7 @@ function SongView({
       setKeyPopOpen(false);
       setCapoPopOpen(false);
       setTempoPopOpen(false);
+      setFingeringChord(null);
       // Starting: when the metronome is on, flash a count-in first; the scroll
       // loop waits until countIn clears. Without it, scrolling begins at once.
       setCountIn(metronome);
@@ -1067,9 +1284,15 @@ function SongView({
   }, "Used"), /*#__PURE__*/React.createElement("div", {
     className: "sv-chords-list",
     ref: chordsListRef
-  }, chords.map(c => /*#__PURE__*/React.createElement("span", {
+  }, chords.map(c => /*#__PURE__*/React.createElement("button", {
     key: c,
-    className: "sv-chord-chip"
+    type: "button",
+    className: "sv-chord-chip chip-btn",
+    "aria-label": `How to play ${c}`,
+    onClick: e => {
+      e.stopPropagation();
+      setFingeringChord(c);
+    }
   }, c))), chordsOverflow && /*#__PURE__*/React.createElement("span", {
     className: "sv-chords-ellipsis"
   }, "\xB7\xB7\xB7")), chordsOpen && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
@@ -1098,14 +1321,24 @@ function SongView({
       gap: 8,
       flexWrap: 'wrap'
     }
-  }, chords.map(c => /*#__PURE__*/React.createElement("span", {
+  }, chords.map(c => /*#__PURE__*/React.createElement("button", {
     key: c,
-    className: "sv-chord-chip",
+    type: "button",
+    className: "sv-chord-chip chip-btn",
     style: {
       fontSize: 14,
       padding: '4px 10px'
+    },
+    "aria-label": `How to play ${c}`,
+    onClick: () => {
+      setChordsOpen(false);
+      setFingeringChord(c);
     }
-  }, c))))), /*#__PURE__*/React.createElement(SpacingPopup, {
+  }, c))))), fingeringChord && /*#__PURE__*/React.createElement(ChordFingeringPopup, {
+    chord: fingeringChord,
+    capo: vCapo,
+    onClose: () => setFingeringChord(null)
+  }), /*#__PURE__*/React.createElement(SpacingPopup, {
     open: spacingOpen,
     onClose: () => setSpacingOpen(false),
     gaps: gaps,
@@ -1119,7 +1352,8 @@ function SongView({
   }, /*#__PURE__*/React.createElement(SongBody, {
     lines: parsedLines,
     lyricSize: lyricSize,
-    contentRef: contentRef
+    contentRef: contentRef,
+    onChordTap: setFingeringChord
   })), !barAtTop && autoscrollBar);
 }
 window.SongView = SongView;

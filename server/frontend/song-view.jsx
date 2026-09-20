@@ -14,6 +14,10 @@ const FACTOR_MAX = 1.7;         // sparse/blank lines never faster than ~170%
 const FACTOR_SMOOTH = 4;        // per-second lerp toward the target factor
 const READ_ANCHOR = 0.35;       // viewport fraction treated as the line being read
 
+// Autoscroll pace for a song that has never had its speed touched. Stored
+// values are half what the bar displays, so 0.5 is the "1.0x" the controls show.
+const DEFAULT_SCROLL_SPEED = 0.5;
+
 // Constant vs. adaptive (density-aware) autoscroll is a per-device preference.
 const SCROLL_DENSITY_KEY = 'chords.scrollDensity';
 function loadDensityMode() {
@@ -25,36 +29,50 @@ function loadDensityMode() {
   return true; // adaptive on by default
 }
 
-function SongBody({ body, lines: linesProp, lyricSize = 16, contentRef }) {
+function SongBody({ body, lines: linesProp, lyricSize = 16, contentRef, onChordTap = null }) {
   const lines = useMemoSV(
     () => linesProp || window.IT.parseSong(body || ''),
     [linesProp, body]
   );
   return (
     <div className="sv-content" ref={contentRef} style={{ '--lyric-size': lyricSize + 'px' }}>
-      {lines.map((l, i) => <LineView key={i} line={l} />)}
+      {lines.map((l, i) => <LineView key={i} line={l} onChordTap={onChordTap} />)}
     </div>
   );
 }
 
-function LineView({ line }) {
+function LineView({ line, onChordTap }) {
   if (line.type === 'empty') return <div className="line lyric" style={{ height: '1em' }}>&nbsp;</div>;
   if (line.type === 'section') return <span className="section-tag">{line.name}</span>;
   // Bar/progression line ("| [Am] | [F] | x4") — chord chips inline with the
   // bar markers, all on one row (same chip badge style as chords over lyrics).
-  if (line.type === 'progression') return <ProgressionLine tokens={line.tokens} />;
+  if (line.type === 'progression') return <ProgressionLine tokens={line.tokens} onChordTap={onChordTap} />;
   // Chord-only lines ('instr') render with the same chord-chip style as
   // chord+lyric lines — the chips sit above blank space instead of literal
   // [C] text.
-  return <ChipLine tokens={line.tokens} />;
+  return <ChipLine tokens={line.tokens} onChordTap={onChordTap} />;
 }
 
-function ProgressionLine({ tokens }) {
+// A chord badge. Given a tap handler it becomes a real button, so the fingering
+// popup is reachable by keyboard as well as by tapping; without one (previews,
+// read-only renders elsewhere) it stays the plain span it has always been.
+function ChordChip({ chord, onChordTap }) {
+  if (!onChordTap) return <span className="chip">{chord}</span>;
+  return (
+    <button type="button" className="chip chip-btn"
+            aria-label={`How to play ${chord}`}
+            onClick={(e) => { e.stopPropagation(); onChordTap(chord); }}>
+      {chord}
+    </button>
+  );
+}
+
+function ProgressionLine({ tokens, onChordTap }) {
   return (
     <div className="line prog-line">
       {tokens.map((t, i) => (
         <React.Fragment key={i}>
-          {t.chord && <span className="chip">{t.chord}</span>}
+          {t.chord && <ChordChip chord={t.chord} onChordTap={onChordTap} />}
           {t.text && <span className="prog-text">{t.text}</span>}
         </React.Fragment>
       ))}
@@ -62,17 +80,136 @@ function ProgressionLine({ tokens }) {
   );
 }
 
-function ChipLine({ tokens }) {
+function ChipLine({ tokens, onChordTap }) {
   const anyChord = tokens.some(t => t.chord);
   return (
     <div className="line chip-line">
       {tokens.map((t, i) => (
         <span key={i} className={`chip-token ${anyChord && !t.chord ? 'no-chip' : ''}`}>
-          {t.chord && <span className="chip">{t.chord}</span>}
+          {t.chord && <ChordChip chord={t.chord} onChordTap={onChordTap} />}
           <span className="lyric">{t.text || '\u00A0'}</span>
         </span>
       ))}
     </div>
+  );
+}
+
+// ---------- chord fingering diagram ----------
+// Standard chord box: the six strings run left (low E) to right (high e), five
+// frets down. window.IT.chordVoicings works out the shapes; this only draws one.
+const DG = { sp: 14, fr: 17, strings: 6, frets: 5, padL: 20, padT: 20, padR: 10, padB: 4 };
+
+function ChordDiagram({ voicing, width = 112 }) {
+  const { frets, fingers, barre } = voicing;
+  const fretted = frets.filter(f => f > 0);
+  const highest = fretted.length ? Math.max.apply(null, fretted) : 0;
+  const lowest = fretted.length ? Math.min.apply(null, fretted) : 0;
+  // Everything within the first five frets is drawn against the nut; higher up
+  // the box starts at the shape's lowest fret and says which one that is.
+  const startFret = highest <= DG.frets ? 1 : lowest;
+  const gridW = DG.sp * (DG.strings - 1);
+  const gridH = DG.fr * DG.frets;
+  const w = DG.padL + gridW + DG.padR;
+  const h = DG.padT + gridH + DG.padB;
+  const sx = (i) => DG.padL + i * DG.sp;
+  const fy = (f) => DG.padT + (f - startFret + 0.5) * DG.fr;
+  const underBarre = (i, f) => barre && f === barre.fret && i >= barre.from && i <= barre.to;
+
+  return (
+    <svg className="chord-dg" viewBox={`0 0 ${w} ${h}`} width={width} height={width * h / w}
+         role="img" aria-hidden="true" focusable="false">
+      {/* fret wires, plus a thick nut when the box starts at the top of the neck */}
+      {Array.from({ length: DG.frets + 1 }, (_, i) => (
+        <line key={`f${i}`} className="dg-line"
+              x1={DG.padL} x2={DG.padL + gridW}
+              y1={DG.padT + i * DG.fr} y2={DG.padT + i * DG.fr} />
+      ))}
+      {startFret === 1
+        ? <rect className="dg-nut" x={DG.padL - 0.5} y={DG.padT - 3} width={gridW + 1} height={3.2} rx={1} />
+        : <text className="dg-fretlabel" x={DG.padL - 9} y={fy(startFret) + 3} textAnchor="end">{startFret}</text>}
+
+      {/* strings */}
+      {Array.from({ length: DG.strings }, (_, i) => (
+        <line key={`s${i}`} className="dg-line" x1={sx(i)} x2={sx(i)} y1={DG.padT} y2={DG.padT + gridH} />
+      ))}
+
+      {/* above the nut: o = play it open, × = don't play it */}
+      {frets.map((f, i) => {
+        if (f === 0) return <circle key={`o${i}`} className="dg-open" cx={sx(i)} cy={DG.padT - 9} r={3.1} />;
+        if (f < 0) return (
+          <g key={`x${i}`} className="dg-mute">
+            <line x1={sx(i) - 3} y1={DG.padT - 12} x2={sx(i) + 3} y2={DG.padT - 6} />
+            <line x1={sx(i) - 3} y1={DG.padT - 6} x2={sx(i) + 3} y2={DG.padT - 12} />
+          </g>
+        );
+        return null;
+      })}
+
+      {/* the index-finger barre, drawn as one bar across the strings it covers */}
+      {barre && (
+        <g>
+          <rect className="dg-dot" x={sx(barre.from) - 5.2} y={fy(barre.fret) - 5.2}
+                width={sx(barre.to) - sx(barre.from) + 10.4} height={10.4} rx={5.2} />
+          <text className="dg-finger" x={sx(barre.from)} y={fy(barre.fret) + 2.7} textAnchor="middle">1</text>
+        </g>
+      )}
+
+      {/* fretted notes */}
+      {frets.map((f, i) => (f > 0 && !underBarre(i, f)) ? (
+        <g key={`d${i}`}>
+          <circle className="dg-dot" cx={sx(i)} cy={fy(f)} r={5.2} />
+          {fingers[i] ? (
+            <text className="dg-finger" x={sx(i)} y={fy(f) + 2.7} textAnchor="middle">{fingers[i]}</text>
+          ) : null}
+        </g>
+      ) : null)}
+    </svg>
+  );
+}
+
+// Tap a chord anywhere in a song → this. Shows the shapes we know for it:
+// the open voicing first when there is one, then movable barre positions.
+function ChordFingeringPopup({ chord, capo, onClose }) {
+  const info = useMemoSV(() => window.IT.chordVoicings(chord), [chord]);
+  return (
+    <>
+      <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={onClose} />
+      <div className="sv-center-popup chord-popup">
+        <div className="sv-center-popup-head">
+          <span>
+            {chord}
+            {info && <span className="chord-quality"> · {info.qualityName}</span>}
+          </span>
+          <button className="btn btn-ghost btn-icon btn-sm" onClick={onClose} aria-label="Close">
+            <Icon name="close" size={14} />
+          </button>
+        </div>
+        {!info ? (
+          <div className="chord-note">No guitar shape for this one.</div>
+        ) : (
+          <>
+            <div className="chord-voicings">
+              {info.voicings.map((v, i) => (
+                <figure key={i} className="chord-voicing">
+                  <ChordDiagram voicing={v} />
+                  <figcaption>{v.label}</figcaption>
+                </figure>
+              ))}
+            </div>
+            <div className="chord-note">Notes · {info.voicings[0].notes.join(' ')}</div>
+            {info.approximate && (
+              <div className="chord-note">Closest shape we know — the written chord adds notes this one leaves out.</div>
+            )}
+            {info.bass && !info.bassHandled && (
+              <div className="chord-note">Slash chord: play {info.bass} in the bass over this shape.</div>
+            )}
+            {capo > 0 && (
+              <div className="chord-note">Capo {capo}: fret numbers count from the capo, not the nut.</div>
+            )}
+          </>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -86,7 +223,7 @@ function SongView({ song, playlist, store, onBack,
                     keepAwake, chordColor = 'orange',
                     metronome = false, metronomeBeats = 4, barAtTop = false, readOnly = false,
                     gaps = { top: 0, bottom: 0 }, setGaps = null }) {
-  const [speed, setSpeed] = useStateSV(song.scrollSpeed || 1.0);
+  const [speed, setSpeed] = useStateSV(song.scrollSpeed || DEFAULT_SCROLL_SPEED);
   // In read-only mode (public share link) key/capo/tempo changes are kept as
   // local-only overrides — they never persist. In normal mode these stay null
   // and the controls write through to the store as before.
@@ -101,6 +238,7 @@ function SongView({ song, playlist, store, onBack,
   const [fontPopOpen, setFontPopOpen] = useStateSV(false);
   const [sectionsOpen, setSectionsOpen] = useStateSV(false);
   const [chordsOpen, setChordsOpen] = useStateSV(false);
+  const [fingeringChord, setFingeringChord] = useStateSV(null);  // chord whose diagram is open
   const [chordsOverflow, setChordsOverflow] = useStateSV(false);
   const [keyPopOpen, setKeyPopOpen] = useStateSV(false);
   const [capoPopOpen, setCapoPopOpen] = useStateSV(false);
@@ -119,6 +257,7 @@ function SongView({ song, playlist, store, onBack,
   const linesHRef = useRefSV(0);          // measured height of just the lyric lines (excl. padding)
   const factorRef = useRefSV(1);          // smoothed density speed factor
   const densityModeRef = useRefSV(densityMode);  // read live in the rAF tick
+  const fingeringRef = useRefSV(null);    // same, for the Escape key handler
   const toast = useToast();
   const [menuEl, setMenuEl] = useStateSV(null);
 
@@ -161,7 +300,8 @@ function SongView({ song, playlist, store, onBack,
   useEffectSV(() => {
     setAutoscroll(false);
     setCountIn(false);
-    setSpeed(song.scrollSpeed || 1.0);
+    setSpeed(song.scrollSpeed || DEFAULT_SCROLL_SPEED);
+    setFingeringChord(null);
     setLocKey(null); setLocCapo(null); setLocTempo(null); setLocBody(null);
   }, [song.id]);
 
@@ -271,9 +411,11 @@ function SongView({ song, playlist, store, onBack,
     const tick = (ts) => {
       const el = scrollRef.current;
       if (!el) { rafRef.current = requestAnimationFrame(tick); return; }
-      // Paused by a manual scroll — keep ticking but don't advance, and keep
-      // the clock fresh so we don't lurch when auto resumes.
-      if (pausedRef.current) { lastTsRef.current = ts; rafRef.current = requestAnimationFrame(tick); return; }
+      // Paused by a manual scroll, or by an open chord diagram (you tapped a
+      // chord to read it, so the song shouldn't run out from under it) — keep
+      // ticking but don't advance, and keep the clock fresh so we don't lurch
+      // when auto resumes.
+      if (pausedRef.current || fingeringRef.current) { lastTsRef.current = ts; rafRef.current = requestAnimationFrame(tick); return; }
       if (!lastTsRef.current) lastTsRef.current = ts;
       const dt = (ts - lastTsRef.current) / 1000;
       lastTsRef.current = ts;
@@ -367,13 +509,16 @@ function SongView({ song, playlist, store, onBack,
     };
   }, [autoscroll]);
 
+  useEffectSV(() => { fingeringRef.current = fingeringChord; }, [fingeringChord]);
+
   useEffectSV(() => {
     const h = (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
       if (e.key === ' ') { e.preventDefault(); toggleAutoscroll(); }
       if (e.key === '+' || e.key === '=') handleTranspose(1);
       if (e.key === '-') handleTranspose(-1);
-      if (e.key === 'Escape') onBack();
+      // Escape dismisses the chord diagram if one is up, and only then leaves.
+      if (e.key === 'Escape') { if (fingeringRef.current) setFingeringChord(null); else onBack(); }
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
@@ -406,6 +551,7 @@ function SongView({ song, playlist, store, onBack,
       setKeyPopOpen(false);
       setCapoPopOpen(false);
       setTempoPopOpen(false);
+      setFingeringChord(null);
       // Starting: when the metronome is on, flash a count-in first; the scroll
       // loop waits until countIn clears. Without it, scrolling begins at once.
       setCountIn(metronome);
@@ -766,7 +912,11 @@ function SongView({ song, playlist, store, onBack,
         <div className={`sv-chords-bar${chordsOverflow ? ' has-overflow' : ''}`} onClick={() => setChordsOpen(true)}>
           <span className="sv-chords-label">Used</span>
           <div className="sv-chords-list" ref={chordsListRef}>
-            {chords.map(c => <span key={c} className="sv-chord-chip">{c}</span>)}
+            {chords.map(c => (
+              <button key={c} type="button" className="sv-chord-chip chip-btn"
+                      aria-label={`How to play ${c}`}
+                      onClick={(e) => { e.stopPropagation(); setFingeringChord(c); }}>{c}</button>
+            ))}
           </div>
           {chordsOverflow && <span className="sv-chords-ellipsis">···</span>}
         </div>
@@ -786,11 +936,20 @@ function SongView({ song, playlist, store, onBack,
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {chords.map(c => (
-                <span key={c} className="sv-chord-chip" style={{ fontSize: 14, padding: '4px 10px' }}>{c}</span>
+                <button key={c} type="button" className="sv-chord-chip chip-btn"
+                        style={{ fontSize: 14, padding: '4px 10px' }}
+                        aria-label={`How to play ${c}`}
+                        onClick={() => { setChordsOpen(false); setFingeringChord(c); }}>{c}</button>
               ))}
             </div>
           </div>
         </>
+      )}
+
+      {/* Chord fingering — tapping any chord chip opens its diagram */}
+      {fingeringChord && (
+        <ChordFingeringPopup chord={fingeringChord} capo={vCapo}
+                             onClose={() => setFingeringChord(null)} />
       )}
 
       {/* Edge-spacing adjuster — shared popup; live preview as you drag */}
@@ -801,7 +960,8 @@ function SongView({ song, playlist, store, onBack,
       {barAtTop && autoscrollBar}
 
       <div className="sv-scroll" ref={scrollRef} style={{ '--side-space': sideSpace + 'px' }}>
-        <SongBody lines={parsedLines} lyricSize={lyricSize} contentRef={contentRef} />
+        <SongBody lines={parsedLines} lyricSize={lyricSize} contentRef={contentRef}
+                  onChordTap={setFingeringChord} />
       </div>
 
       {!barAtTop && autoscrollBar}
