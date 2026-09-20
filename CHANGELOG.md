@@ -8,6 +8,41 @@ Each released version below has a `## [x.y.z]` heading. The release workflow
 extracts the section matching the pushed tag (`vx.y.z`) and uses it as the
 release body, on Forgejo and then on GitHub — so keep these sections accurate
 before tagging.
+## [2026.9.3]
+
+### Added
+
+- **Tap a chord to see how to play it.** Every chord badge — over the lyrics, in
+  a progression line, in the "Used" bar — is a button now, and tapping one opens
+  a fingering diagram: a hand-written open-position shape where one exists, then
+  movable E- and A-shape barre positions, lowest first. A suffix we have no shape
+  for falls back to the nearest chord and says so. Autoscroll holds while a
+  diagram is open, and Escape closes the diagram before it leaves the song.
+
+### Changed
+
+- **Songs start at half the autoscroll pace they used to.** A song that has never
+  had its speed touched opens at what the bar shows as "1.0x" rather than "2.0x".
+  Songs already carrying a speed keep it.
+
+### Fixed
+
+- **Edits to a shared playlist's songs now reach its collaborators live.** Sharing
+  a playlist was already live — the invite lands in the inbox instantly, and
+  renaming it, adding a song or reordering it all showed up straight away — but
+  editing one of its songs did not. Two things were wrong: the change was
+  announced only to the person making it, and a collaborator could not edit a song
+  somebody else had added at all. Transposing, capo, tempo and autoscroll pace
+  travel with it. A collaborator can also take their own copy of a shared song
+  again, which "Add to library" had been offering them and then refusing.
+
+- **The editor no longer reports "Updated for everyone" when the save failed.** It
+  fired the write without waiting for it and toasted regardless, closing over the
+  lost edit. It waits now, and stays open with the draft intact on failure.
+
+- **Deleting a song that belongs to a playlist no longer fails with a server
+  error.** Its playlist entry still referenced it, so the delete tripped a foreign
+  key.
 
 ## [2026.9.2]
 
