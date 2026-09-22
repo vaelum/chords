@@ -1112,4 +1112,19 @@ button { font-family: inherit; }
   .sv-live-pill svg { animation: none; }
 }
 
+/* A follower's page is a mirror of another device, so it does not take scroll
+   input at all: no wheel, no touch drag, no keyboard, no rubber-band handing
+   the gesture to the page behind it. `overflow: hidden` still allows the
+   scrollTop the sync loop writes every frame — it only stops the *user*.
+   Without this the two fight: you drag, the next anchor puts it back, and the
+   text appears to jump. */
+.stage-scroll {
+  overflow: hidden;
+  touch-action: none;
+  overscroll-behavior: contain;
+  -webkit-user-select: none;
+  user-select: none;
+  outline: none;
+}
+
 .pl-detail-actions { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px; }

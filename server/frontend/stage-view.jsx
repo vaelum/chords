@@ -20,9 +20,17 @@ const { useState: useStateST, useEffect: useEffectST, useRef: useRefST,
 const STAGE_ANCHOR = 0.35;
 
 // Drift beyond this many lines is corrected; below it, left alone. A follower
-// that snapped to every tick would twitch six times a minute for no reason.
+// that answered every tick would twitch six times a minute for no reason.
 const DRIFT_LINES = 1.5;
-const EASE_MS = 400;
+// How much faster than the song's own pace a correction may run: a catch-up is
+// meant to be unnoticeable, so half again as fast, not a lurch.
+const CATCHUP = 0.5;
+// Per-second lerp toward a paused anchor. ~6 covers a hand-scroll's worth of
+// movement in a couple of hundred milliseconds without ever looking abrupt.
+const GLIDE = 6;
+// Beyond this the leader did not drift, they MOVED — a new song, a fling back
+// to the top — and following means going there at once rather than gliding.
+const BACK_JUMP = 8;
 
 function StageView({ playlist, session, store, onBack,
                     lyricSize, setLyricSize, sideSpace, setSideSpace }) {
@@ -33,7 +41,6 @@ function StageView({ playlist, session, store, onBack,
   const rafRef = useRefST(0);
   // The follower's own clock: which line it believes it is on, as a float.
   const lineRef = useRefST(0);
-  const easeRef = useRefST(null);     // {from, to, start} while catching up
 
   const now = session ? session.now : null;
   const song = now ? now.song : null;
@@ -99,7 +106,11 @@ function StageView({ playlist, session, store, onBack,
   }, [parsedLines, lyricSize, measure]);
 
   // line (float) → scrollTop, interpolating between the two lines it falls
-  // between so the page moves smoothly rather than a line at a time.
+  // between so the page moves by fractions of a line rather than a line at a
+  // time. Always a direct write: no CSS smooth-scroll anywhere on this screen,
+  // because the loop below writes scrollTop every frame and a smooth scroll
+  // restarts its own animation on every write — two animations fighting, which
+  // is the "runs on, then jumps back" the follower used to show.
   const scrollToLine = useCallbackST((line) => {
     const el = scrollRef.current, tops = lineTopsRef.current;
     if (!el || !tops.length) return;
@@ -109,54 +120,62 @@ function StageView({ playlist, session, store, onBack,
     el.scrollTop = Math.max(0, y - el.clientHeight * STAGE_ANCHOR);
   }, []);
 
-  // A new anchor arrived (a song opened, play, pause, a tick, or this screen
-  // just opened). `session.at` is when THIS device heard it — never the
-  // server's `since`, which belongs to another machine's clock.
+  // The last anchor heard, kept in a ref so the loop reads it without being
+  // torn down and restarted on every tick. `at` is when THIS device heard it —
+  // never the server's `since`, which is another machine's clock.
+  const anchorRef = useRefST(null);
   useEffectST(() => {
-    if (!now) return;
-    const elapsed = playing ? Math.max(0, (Date.now() - (session.at || Date.now())) / 1000) : 0;
-    const remote = now.line + elapsed * (speed * 0.5);
-    const local = lineRef.current;
-    // Snap on a song change or a big jump; ease a small correction so ordinary
-    // play never visibly jerks.
-    if (!playing || Math.abs(remote - local) > DRIFT_LINES * 4) {
-      lineRef.current = remote;
-      easeRef.current = null;
-      scrollToLine(remote);
-    } else if (Math.abs(remote - local) > DRIFT_LINES) {
-      easeRef.current = { from: local, to: remote, start: performance.now() };
-    }
-  }, [now && now.since, now && now.song && now.song.id, playing, session && session.at]);
+    anchorRef.current = now
+      ? { line: now.line, playing, speed, at: session.at || Date.now(),
+          song: now.song && now.song.id }
+      : null;
+  }, [now && now.since, now && now.line, now && now.song && now.song.id,
+      playing, speed, session && session.at]);
 
-  // The clock. Runs only while the controller is playing — a follower parked on
-  // an open song must cost nothing and must not creep.
+  // One loop for both states, which is what makes the follow smooth: there is
+  // no second code path that can write a conflicting scrollTop.
+  //
+  //   playing — run our own clock at the shared pace and correct toward the
+  //             leader only FORWARD. A correction backwards is what reads as a
+  //             jump: the leader's reported line is always a little behind ours
+  //             (it is measured, then travels), so "catch up" in both
+  //             directions means twitching against the network. Being a
+  //             fraction of a line early is invisible; going back a line is not.
+  //   paused  — glide toward the anchor. The leader scrolling a paused song by
+  //             hand sends a few anchors a second, and gliding turns those into
+  //             one continuous movement instead of a flick-book.
+  //
+  // A jump back only happens when the leader really did jump: a new song, or a
+  // fling back to the top. That is BACK_JUMP lines away and snaps deliberately.
   useEffectST(() => {
-    if (!playing) {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      rafRef.current = 0;
-      return;
-    }
+    if (!song) return;
     let last = 0;
     const tick = (ts) => {
-      if (!last) last = ts;
-      const dt = (ts - last) / 1000;
-      last = ts;
-      const ease = easeRef.current;
-      if (ease) {
-        const t = Math.min(1, (ts - ease.start) / EASE_MS);
-        // The target keeps moving while we catch up to it, so add the pace.
-        const to = ease.to + ((ts - ease.start) / 1000) * (speed * 0.5);
-        lineRef.current = ease.from + (to - ease.from) * t;
-        if (t >= 1) easeRef.current = null;
-      } else {
-        lineRef.current += dt * (speed * 0.5);
-      }
-      scrollToLine(lineRef.current);
       rafRef.current = requestAnimationFrame(tick);
+      const a = anchorRef.current;
+      if (!a) return;
+      if (!last) last = ts;
+      const dt = Math.min(0.1, (ts - last) / 1000);   // a backgrounded tab must not lurch
+      last = ts;
+      const pace = a.speed * 0.5;
+      const want = a.playing ? a.line + ((Date.now() - a.at) / 1000) * pace : a.line;
+      let line = lineRef.current;
+      const diff = want - line;
+      if (a.playing) {
+        line += dt * pace;                       // our own clock, at the shared pace
+        if (diff > DRIFT_LINES) line += Math.min(diff - DRIFT_LINES, dt * pace * CATCHUP);
+        else if (diff < -BACK_JUMP) line = want; // the leader went back on purpose
+      } else if (Math.abs(diff) > BACK_JUMP) {
+        line = want;                             // a new song, or a fling
+      } else {
+        line += diff * Math.min(1, dt * GLIDE);
+      }
+      lineRef.current = line;
+      scrollToLine(line);
     };
     rafRef.current = requestAnimationFrame(tick);
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); rafRef.current = 0; };
-  }, [playing, speed, scrollToLine]);
+  }, [song && song.id, scrollToLine]);
 
   // The same per-device tweaks the song view uses, so a phone that likes big
   // text keeps it here. Two controls and no more: this screen is for reading.
@@ -207,8 +226,12 @@ function StageView({ playlist, session, store, onBack,
                desc={`${following === 'your other device' ? 'Your other device' : following} hasn't opened a song yet.`} />
       )}
 
+      {/* This element is not the viewer's to move: it mirrors another device.
+          CSS keeps gestures out (.stage-scroll is overflow:hidden with
+          touch-action:none), and the loop above is the only thing that ever
+          writes scrollTop. */}
       {song && (
-        <div className="sv-scroll stage-scroll" ref={scrollRef}
+        <div className="sv-scroll stage-scroll" ref={scrollRef} tabIndex={-1}
              style={{ '--side-space': sideSpace + 'px' }}>
           {/* No onChordTap: a follower's screen is read-only, and a popup would
               sit there while the song scrolled out from under it. */}

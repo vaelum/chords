@@ -8,6 +8,31 @@ Each released version below has a `## [x.y.z]` heading. The release workflow
 extracts the section matching the pushed tag (`vx.y.z`) and uses it as the
 release body, on Forgejo and then on GitHub — so keep these sections accurate
 before tagging.
+## [2026.9.5]
+
+### Changed
+
+- **A follower now tracks the leader with the song paused, too.** Sessions only
+  followed a song that was *playing*, so reading through a set at talking pace —
+  stopping on a bridge, scrolling back over a verse — left everyone else's
+  screen where the last play had put it. Scrolling a paused song by hand now
+  moves the followers with you.
+
+- **A follower's screen no longer takes scroll input.** It mirrors another
+  device, so scrolling it yourself only ever ended with the text snapping back
+  when the next update arrived. Wheel, drag and keyboard do nothing there now;
+  text size and margins still do.
+
+### Fixed
+
+- **A following screen could run on and then jump back.** Two things were
+  writing the scroll position — the follower's own clock and the corrections
+  arriving from the leader — and a correction that pulled *backwards* was
+  visible as a jump. The two are one loop now, corrections while playing only
+  ever run forward, and the leader reports a fractional line instead of a whole
+  one (a whole-line answer is half a line stale on average, which is a lag the
+  follower was dutifully correcting for and did not have).
+
 ## [2026.9.4]
 
 ### Added

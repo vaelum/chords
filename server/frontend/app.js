@@ -1835,8 +1835,8 @@ function AppShell({
   // controller's real position is not "anchor + elapsed x pace" — density mode
   // varies the pace line by line — so only the view that measured the scroll
   // knows which line is actually being read.
-  const onBroadcastTick = useCallbackA(line => {
-    if (controlling) store.pushTick(controlling, line, true);
+  const onBroadcastTick = useCallbackA((line, playing) => {
+    if (controlling) store.pushTick(controlling, line, playing);
   }, [controlling, store.pushTick]);
   const goStage = playlistId => navigate({
     name: 'stage',

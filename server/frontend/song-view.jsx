@@ -364,7 +364,13 @@ function SongView({ song, playlist, store, onBack,
     const anchorY = el.scrollTop + el.clientHeight * READ_ANCHOR;
     let idx = 0, lo = 0, hi = tops.length - 1;
     while (lo <= hi) { const mid = (lo + hi) >> 1; if (tops[mid] <= anchorY) { idx = mid; lo = mid + 1; } else hi = mid - 1; }
-    return idx;
+    // Fractional, not just the index: a whole-line answer is on average half a
+    // line behind where this device actually is, and a follower correcting for
+    // a lag that isn't real is a follower twitching backwards.
+    const next = idx + 1 < tops.length ? tops[idx + 1] : tops[idx] + (linesHRef.current / tops.length);
+    const span = next - tops[idx];
+    const frac = span > 0 ? Math.max(0, Math.min(1, (anchorY - tops[idx]) / span)) : 0;
+    return idx + frac;
   }, []);
 
   // Two emitters, each with a ref guard, because React runs an effect whenever
@@ -408,8 +414,48 @@ function SongView({ song, playlist, store, onBack,
   useEffectSV(() => {
     if (!broadcasting || !onBroadcastTick) return;
     if (!autoscroll || countIn) return;
-    const id = setInterval(() => onBroadcastTick(currentLine()), 10000);
+    const id = setInterval(() => onBroadcastTick(currentLine(), true), 10000);
     return () => clearInterval(id);
+  }, [broadcasting, autoscroll, countIn, onBroadcastTick, currentLine]);
+
+  // 4. Position while NOT advancing on its own — scrolling a paused song by
+  //    hand, and the manual-scroll pause that interrupts autoscroll. Without
+  //    this a follower tracks the leader only while the song plays, and reading
+  //    through a song together at talking pace — the rehearsal case, and most of
+  //    a rehearsal — leaves everyone else on line 0.
+  //
+  //    While the song IS advancing this stays quiet and leaves the 10 s beacon
+  //    to it: the rAF loop writes scrollTop every frame, so reacting to scroll
+  //    events would mean several POSTs a second for something the follower is
+  //    already predicting correctly. The exception is the frame where `playing`
+  //    itself changes — a hand on the screen pausing the scroll, or the
+  //    auto-advance resuming afterwards — which the follower cannot predict and
+  //    must be told about at once.
+  useEffectSV(() => {
+    if (!broadcasting || !onBroadcastTick) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    let timer = null, sentLine = null, sentPlaying = null;
+    const advancing = () => autoscroll && !countIn && !pausedRef.current && !fingeringRef.current;
+    const report = () => {
+      timer = null;
+      const playing = advancing();
+      const line = currentLine();
+      if (line === sentLine && playing === sentPlaying) return;
+      sentLine = line; sentPlaying = playing;
+      onBroadcastTick(line, playing);
+    };
+    const onScroll = () => {
+      // Advancing and already reported as such: the beacon owns this.
+      if (advancing() && sentPlaying === true) return;
+      // Coalesced — a drag is hundreds of scroll events and at most a few lines.
+      if (!timer) timer = setTimeout(report, 250);
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      el.removeEventListener('scroll', onScroll);
+      if (timer) clearTimeout(timer);
+    };
   }, [broadcasting, autoscroll, countIn, onBroadcastTick, currentLine]);
 
   const effectiveBody = useMemoSV(() => window.IT.transposeBody(vBody, 0), [vBody]);
