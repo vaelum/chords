@@ -9,6 +9,10 @@ help of an AI parser.
   auto-scroll speed, tags) stored as plain text with inline chords.
 - **Playlists** — group songs, reorder them, and invite other users
   to collaborate or share a read-only public link.
+- **Sessions** — one device leads a playlist and the others follow: the song
+  appears on every follower's screen as soon as the leader opens it, and scrolls
+  in step once they play. Works between people on a shared playlist and between
+  your own devices on a playlist you have not shared at all.
 - **Sharing & inbox** — send a song or a whole playlist to another user; they
   accept it from their inbox. New accounts are created through single-use invite
   links.

@@ -226,6 +226,13 @@ function useStore() {
   const [songs, setSongs] = useStateA([]);
   const [playlists, setPlaylists] = useStateA([]);
   const [inbox, setInbox] = useStateA([]);
+  // Live playlist sessions, playlist id → session. The map is the whole model:
+  // whether this device controls one is `controllerClientId === IT.clientId`,
+  // so it survives a re-fetch and cannot drift out of step with the server.
+  // `at` is when THIS device last heard the anchor — the follower's clock runs
+  // off that, never off the server's `since`, which is a different machine's
+  // wall clock.
+  const [sessions, setSessions] = useStateA({});
   // Flips true when the SSE stream reports a build id newer than the one this
   // page loaded (see LOADED_BUILD) — i.e. a deploy happened under us.
   const [updateReady, setUpdateReady] = useStateA(false);
@@ -249,16 +256,21 @@ function useStore() {
   }
 
   const _loadAll = useCallbackA(async (me) => {
-    const [songsData, playlistsData, inboxData, usersData] = await Promise.all([
+    const [songsData, playlistsData, inboxData, usersData, sessionsData] = await Promise.all([
       window.IT.api('/songs'),
       window.IT.api('/playlists'),
       window.IT.api('/inbox'),
       window.IT.api('/users'),
+      // How a second device finds the session the first one started — without
+      // being told which playlist it was on. Never fatal: an older server has
+      // no such endpoint, and everything else still works.
+      window.IT.api('/sessions').catch(() => []),
     ]);
     _normalizeUsers(usersData, me.id);
     setSongs(songsData);
     setPlaylists(playlistsData);
     setInbox(_normalizeInbox(inboxData));
+    setSessions(_indexSessions(sessionsData));
   }, []);
 
   // Restore the last cached session so an offline start is usable. The inbox is
@@ -523,6 +535,75 @@ function useStore() {
     } catch (e) { console.error(e); return null; }
   }, []);
 
+  // ---------- playlist sessions ----------
+  // A session is broadcast state, not a record: one device drives, every other
+  // device of every collaborator follows. See SESSION-PLAN.md.
+
+  // Stamp each session with the local time it arrived. The wire carries the
+  // server's `since`; subtracting one machine's clock from another's is how you
+  // get a song that starts four seconds in.
+  function _stamp(session) {
+    return session ? { ...session, at: Date.now() } : session;
+  }
+
+  function _indexSessions(list) {
+    const out = {};
+    (list || []).forEach(s => { out[s.playlistId] = _stamp(s); });
+    return out;
+  }
+
+  const refetchSession = useCallbackA(async (id) => {
+    try {
+      const s = await window.IT.api(`/playlists/${id}/session`);
+      setSessions(m => ({ ...m, [id]: _stamp(s) }));
+      return s;
+    } catch (err) {
+      // 404 is the ordinary end of a session, not a failure: it was ended, it
+      // expired, or the playlist stopped being mine.
+      if (err.status === 404) setSessions(m => { const n = { ...m }; delete n[id]; return n; });
+      return null;
+    }
+  }, []);
+
+  const startSession = useCallbackA(async (id, takeover = false) => {
+    const s = await window.IT.api(`/playlists/${id}/session`, {
+      method: 'POST', body: { takeover },
+    });
+    setSessions(m => ({ ...m, [id]: _stamp(s) }));
+    return s;
+  }, []);
+
+  const endSession = useCallbackA(async (id) => {
+    setSessions(m => { const n = { ...m }; delete n[id]; return n; });
+    try { await window.IT.api(`/playlists/${id}/session`, { method: 'DELETE' }); }
+    catch (e) { /* already gone is the same outcome */ }
+  }, []);
+
+  // What the controller has open. Sent when a song is OPENED — not only when it
+  // is played — so a follower sees the page turn, not the previous song.
+  const pushNow = useCallbackA(async (id, body) => {
+    try {
+      const s = await window.IT.api(`/playlists/${id}/session/now`, { method: 'PUT', body });
+      setSessions(m => ({ ...m, [id]: _stamp(s) }));
+      return s;
+    } catch (err) {
+      // Lost control (someone took over) or the session is gone: stop guessing
+      // and take the server's word for it.
+      if (err.status === 409 || err.status === 404) refetchSession(id);
+      return null;
+    }
+  }, [refetchSession]);
+
+  const pushTick = useCallbackA(async (id, line, playing) => {
+    try {
+      await window.IT.api(`/playlists/${id}/session/tick`, {
+        method: 'POST', body: { line, playing },
+      });
+    } catch (err) {
+      if (err.status === 409 || err.status === 404) refetchSession(id);
+    }
+  }, [refetchSession]);
+
   // Read-only public share link (owner only). Returns the updated playlist.
   const createShareLink = useCallbackA(async (id) => {
     const updated = await window.IT.api(`/playlists/${id}/share-link`, { method: 'POST' });
@@ -662,6 +743,22 @@ function useStore() {
       else if (evt.type === 'songs') refetchSongs();
       else if (evt.type === 'playlist' && evt.id) refetchPlaylist(evt.id);
       else if (evt.type === 'playlists') refetchPlaylists();
+      // A session changed hands, opened a song, played or paused: re-fetch, the
+      // house style — the snapshot comes with it.
+      else if (evt.type === 'session' && evt.id) refetchSession(evt.id);
+      // The one event that carries its payload (events.py says why): move the
+      // anchor of a session we already hold, and stamp it with local time.
+      else if (evt.type === 'session-tick' && evt.id) {
+        setSessions(m => {
+          const cur = m[evt.id];
+          if (!cur || !cur.now) return m;
+          return {
+            ...m,
+            [evt.id]: { ...cur, at: Date.now(),
+                        now: { ...cur.now, line: evt.line, playing: evt.playing } },
+          };
+        });
+      }
     };
 
     const ac = new AbortController();
@@ -691,20 +788,21 @@ function useStore() {
 
   return useMemoA(() => ({
     loading, currentUser, online, login, logout, setSession,
-    songs, playlists, inbox,
+    songs, playlists, inbox, sessions,
     unreadCount: inbox.filter(i => i.unread).length,
     createSong, updateSongMeta, updateSong, saveEdit,
     deleteSong, duplicateSong, copySongToLibrary,
     exportSong, exportLibrary, exportPlaylist, importFromFile,
     createPlaylist, sharePlaylist, sharePlaylistShared, shareSong, addToPlaylist, importSongToPlaylist, removeFromPlaylist, updatePlaylist, deletePlaylist, reorderPlaylist,
     createShareLink, removeShareLink,
+    startSession, endSession, refetchSession, pushNow, pushTick,
     acceptSong, acceptPlaylist, dismissInbox, markAllRead,
     replaceWithIncoming, 
     updateMe, changePassword,
     getPlaylist, getSong,
     updateReady,
     ...stubs,
-  }), [loading, currentUser, online, songs, playlists, inbox, updateReady]);
+  }), [loading, currentUser, online, songs, playlists, inbox, sessions, updateReady]);
 }
 
 // ---------- theme mapping ----------
@@ -1160,6 +1258,48 @@ function AppShell({ store, tweaks, setTweaks }) {
   
   const currentPlaylist = currentPlaylistForSong;
 
+  // ---- playlist sessions ---------------------------------------------------
+  // Whether THIS device is driving a session, and which playlist's. Derived from
+  // the session map rather than stored: a take-over from another device (yours
+  // or someone else's) lands as a re-fetch, and control moves here with it — no
+  // second copy of the truth to get stale.
+  const controlling = useMemoA(() => {
+    const mine = Object.values(store.sessions || {})
+      .find(s => s.controllerClientId === window.IT.clientId);
+    return mine ? mine.playlistId : null;
+  }, [store.sessions]);
+
+  const controlledSession = controlling ? store.sessions[controlling] : null;
+
+  // What SongView hands up when the displayed song, or play/pause, changes.
+  // Coalesced: paging through five songs with onNext sends the fifth, not five.
+  const broadcastRef = useRefA(null);
+  const onBroadcast = useCallbackA((payload) => {
+    if (!controlling) return;
+    if (broadcastRef.current) clearTimeout(broadcastRef.current);
+    broadcastRef.current = setTimeout(() => {
+      broadcastRef.current = null;
+      store.pushNow(controlling, payload);
+    }, 150);
+  }, [controlling, store.pushNow]);
+
+  // The drift beacon. SongView sends it rather than this component: the
+  // controller's real position is not "anchor + elapsed x pace" — density mode
+  // varies the pace line by line — so only the view that measured the scroll
+  // knows which line is actually being read.
+  const onBroadcastTick = useCallbackA((line) => {
+    if (controlling) store.pushTick(controlling, line, true);
+  }, [controlling, store.pushTick]);
+
+  const goStage = (playlistId) => navigate({ name: 'stage', playlistId });
+
+  // Opening the stage view (or coming back to it) asks the server outright,
+  // rather than trusting a map that may predate a sleep. This is what makes a
+  // follower free to leave and come back: rejoining is one GET.
+  useEffectA(() => {
+    if (route.name === 'stage' && route.playlistId) store.refetchSession(route.playlistId);
+  }, [route.name, route.playlistId]);
+
   // ---- History-backed navigation -------------------------------------------
   // In-app navigation is mirrored into the browser history stack so the
   // back/forward buttons — and the Android hardware back button in the native
@@ -1232,11 +1372,11 @@ function AppShell({ store, tweaks, setTweaks }) {
     { key: 'settings', label: 'Settings',  icon: 'settings' },
   ];
 
-  const activeNav = route.name === 'playlist' ? 'playlists' :
+  const activeNav = route.name === 'playlist' || route.name === 'stage' ? 'playlists' :
                     route.name === 'song' ? (route.playlistId ? 'playlists' : 'library') :
                     route.name;
 
-  const noChrome = route.name === 'song';
+  const noChrome = route.name === 'song' || route.name === 'stage';
 
   const me = store.currentUser;
 
@@ -1323,6 +1463,7 @@ function AppShell({ store, tweaks, setTweaks }) {
               if (!pl) return <div className="page"><Empty icon="list" title="Playlist not found" /></div>;
               return <PlaylistDetail playlist={pl} store={storeWithActions}
                                      onOpenSong={(songId) => goSongPlaylist(songId, pl.id)}
+                                     onFollow={goStage}
                                      onBack={goBack} />;
             })()}
             {route.name === 'inbox' && (
@@ -1358,9 +1499,25 @@ function AppShell({ store, tweaks, setTweaks }) {
                 barAtTop={tweaks.barAtTop}
                 gaps={tweaks.gaps}
                 setGaps={(g) => setTweak('gaps', g)}
+                broadcasting={!!controlling}
+                onBroadcast={onBroadcast}
+                onBroadcastTick={onBroadcastTick}
+                onEndBroadcast={() => store.endSession(controlling)}
               />
               );
             })()}
+            {route.name === 'stage' && (
+              <StageView
+                playlist={store.playlists.find(p => p.id === route.playlistId)}
+                session={store.sessions[route.playlistId] || null}
+                store={storeWithActions}
+                onBack={goBack}
+                lyricSize={tweaks.lyricSize}
+                setLyricSize={(n) => setTweak('lyricSize', n)}
+                sideSpace={tweaks.sideSpace}
+                setSideSpace={(n) => setTweak('sideSpace', n)}
+              />
+            )}
             {route.name === 'song' && !currentSong && (
               <div className="page"><Empty icon="music" title="Song not found" action={<Btn variant="primary" onClick={goLibrary}>Back to library</Btn>} /></div>
             )}

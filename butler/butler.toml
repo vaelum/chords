@@ -124,4 +124,11 @@ min_version = "115.0"
 # onto the public tag rather than building it again. The order is:
 #
 #   git push origin main v1.2.3     # wait for the build to publish its release
-#   python butler.py publish --tag v1.2.3
+#   python butler.py publish --tag v1.2.3[release]
+# This history reads "release 2026.9.3", not "chords 2026.9.3".
+message       = "release {version}"
+# The Tauri bundles take their name from this file, not from the git tag, so a
+# version left behind here ships an AppImage and an installer labelled with the
+# PREVIOUS release — which is exactly what v2026.9.2 did. The preflight refuses
+# the cut instead of finding out afterwards.
+version_files = ["app/src-tauri/tauri.conf.json"]

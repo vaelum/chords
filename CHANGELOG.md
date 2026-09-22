@@ -8,6 +8,38 @@ Each released version below has a `## [x.y.z]` heading. The release workflow
 extracts the section matching the pushed tag (`vx.y.z`) and uses it as the
 release body, on Forgejo and then on GitHub — so keep these sections accurate
 before tagging.
+## [2026.9.4]
+
+### Added
+
+- **Playlist sessions: one device leads, the others follow.** Start a session
+  from a playlist and every other device sees the song you are on — the moment
+  you open it, not when you start playing. Open the next song and it turns the
+  page on every screen; start scrolling and they scroll with you, in step,
+  whatever their screen size or text setting (the pace is shared in lines per
+  second, so nobody has to match anyone's pixels).
+
+  The followers can be other people on a shared playlist, or your own other
+  devices: a session works on a playlist you have shared with nobody, so the
+  phone on the music stand can follow the laptop you are driving. Any device
+  showing *Live* on a playlist offers **Follow**, and **Take over** moves
+  control to the device you are holding.
+
+  The follower's screen is for reading and nothing else — text size and margins,
+  no transpose, no chord popups — and it keeps itself awake. Joining late,
+  leaving mid-song and coming back, or losing the network for a minute all land
+  you back at the right line. While you are leading, a **Broadcasting** pill
+  marks it, because every song you open is on other people's screens; tapping it
+  ends the session.
+
+### Fixed
+
+- **A song no longer drops out of play mode when it reaches its last line.**
+  Autoscroll used to switch itself off the moment the scroll hit the bottom, so
+  the controls and chips sprang back while you were still on the final chorus.
+  It now holds at the end — controls stay hidden, the screen stays awake — until
+  you stop it yourself, and scrolling back up picks the scroll up again.
+
 ## [2026.9.3]
 
 ### Added

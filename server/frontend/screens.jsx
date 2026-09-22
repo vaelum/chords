@@ -269,6 +269,11 @@ function PlaylistsScreen({ store, onOpen }) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                     <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
                     {p.shared && <Badge variant="outline"><Icon name="users" size={10} /> Shared</Badge>}
+                    {/* So a second device does not have to remember which
+                        playlist the session was started on. */}
+                    {(store.sessions || {})[p.id] && (
+                      <Badge variant="primary"><Icon name="broadcast" size={10} /> Live</Badge>
+                    )}
                   </div>
                 </td>
                 <td className="t-muted">{p.entries.length}</td>
@@ -344,7 +349,7 @@ function PlaylistsScreen({ store, onOpen }) {
 }
 
 // ---------- playlist detail ----------
-function PlaylistDetail({ playlist, store, onOpenSong, onBack }) {
+function PlaylistDetail({ playlist, store, onOpenSong, onBack, onFollow }) {
   const pl = playlist;
   // Each entry carries its own playlist-owned copy of the song.
   const entries = pl.entries
@@ -356,6 +361,29 @@ function PlaylistDetail({ playlist, store, onOpenSong, onBack }) {
   const [shareLinkOpen, setShareLinkOpen] = useStateS(false);
   const isOwner = store.currentUser && pl.ownerId === store.currentUser.id;
   const toast = useToast();
+
+  // A live session on this playlist, if there is one, and whether THIS device is
+  // the one driving it. Not gated on pl.shared: following your own laptop from
+  // your own phone is the same feature (SESSION-PLAN.md, decision 8).
+  const session = (store.sessions || {})[pl.id] || null;
+  const iControl = !!session && session.controllerClientId === window.IT.clientId;
+  const controllerLabel = !session ? ''
+    : session.controllerUserId === (store.currentUser || {}).id
+      ? 'your other device'
+      : session.controllerName;
+
+  async function startSession() {
+    try { await store.startSession(pl.id); }
+    catch (err) {
+      if (err.status === 409) toast(`${controllerLabel || 'Another device'} is already running this session`);
+      else toast('Could not start the session');
+    }
+  }
+
+  async function takeOver() {
+    try { await store.startSession(pl.id, true); }
+    catch (err) { toast('Could not take over the session'); }
+  }
 
   function move(songId, dir) {
     const ids = entries.map(e => e.song.id);
@@ -383,13 +411,34 @@ function PlaylistDetail({ playlist, store, onOpenSong, onBack }) {
               <span className="t-muted">{collabs.length} collaborators · edits sync to everyone</span>
             </div>
           )}
-          {isOwner && (
-            <div style={{ marginTop: 14 }}>
+          <div className="pl-detail-actions">
+            {isOwner && (
               <Btn variant="outline" size="sm" onClick={() => setShareLinkOpen(true)}>
                 <Icon name="link" size={14} /> {pl.publicToken ? 'Share link · active' : 'Share link'}
               </Btn>
-            </div>
-          )}
+            )}
+            {/* Three states, one button. Nobody is running a session: start
+                one. This device is: end it. Someone else (or another device of
+                yours) is: follow, with Take over beside it. */}
+            {!session && (
+              <Btn variant="outline" size="sm" onClick={startSession}>
+                <Icon name="broadcast" size={14} /> Start session
+              </Btn>
+            )}
+            {session && iControl && (
+              <Btn variant="outline" size="sm" onClick={() => store.endSession(pl.id)}>
+                <Icon name="broadcast" size={14} /> End session
+              </Btn>
+            )}
+            {session && !iControl && (
+              <>
+                <Btn variant="primary" size="sm" onClick={() => onFollow(pl.id)}>
+                  <Icon name="broadcast" size={14} /> Follow {controllerLabel}
+                </Btn>
+                <Btn variant="outline" size="sm" onClick={takeOver}>Take over</Btn>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1663,7 +1712,11 @@ function ImportScreen({ store, onDone }) {
 // playlist: title + artist, case-insensitive and whitespace-normalized.
 function songKey(title, artist) {
   const n = (s) => (s || '').trim().toLowerCase().replace(/\s+/g, ' ');
-  return `${n(title)} ${n(artist)}`;
+  // \u0000 rather than a literal NUL byte: the character is the point (no title
+  // or artist can contain it, so the key is unambiguous), but writing it raw made
+  // this whole file binary to grep — searches for anything in it silently found
+  // nothing.
+  return `${n(title)}\u0000${n(artist)}`;
 }
 
 function ImportPanel({ onExtracted, store, onPlaylistImported, mode = 'web' }) {

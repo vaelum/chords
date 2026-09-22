@@ -10,6 +10,12 @@ Events are intentionally tiny *signals*, not payloads — e.g. {"type": "inbox"}
 or {"type": "playlist", "id": ...}. The client reacts by re-fetching the
 affected resource, so what it ends up with is always exactly what the REST API
 would return (no second serialization path to keep in sync).
+
+One deliberate exception: {"type": "session-tick", ...} carries its line number
+inline (routers/sessions.py). It is the drift beacon of a playlist session, sent
+every ~10 s while a song plays, and making every follower re-fetch a whole song
+body to learn one integer is not worth the consistency — the snapshot it would
+re-fetch has not changed. Every other session event is a signal like the rest.
 """
 from __future__ import annotations
 

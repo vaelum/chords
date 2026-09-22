@@ -222,7 +222,12 @@ function SongView({ song, playlist, store, onBack,
                     lyricSize, setLyricSize, sideSpace = 0, setSideSpace = null,
                     keepAwake, chordColor = 'orange',
                     metronome = false, metronomeBeats = 4, barAtTop = false, readOnly = false,
-                    gaps = { top: 0, bottom: 0 }, setGaps = null }) {
+                    gaps = { top: 0, bottom: 0 }, setGaps = null,
+                    // Session broadcast. This component's whole involvement is
+                    // to SAY what is on screen — where that goes, how often, and
+                    // what it means is app.jsx's business (see SESSION-PLAN.md).
+                    broadcasting = false, onBroadcast = null, onBroadcastTick = null,
+                    onEndBroadcast = null }) {
   const [speed, setSpeed] = useStateSV(song.scrollSpeed || DEFAULT_SCROLL_SPEED);
   // In read-only mode (public share link) key/capo/tempo changes are kept as
   // local-only overrides — they never persist. In normal mode these stay null
@@ -340,6 +345,72 @@ function SongView({ song, playlist, store, onBack,
       if (sentinel) { sentinel.release().catch(() => {}); sentinel = null; }
     };
   }, [keepAwake, song.id]);
+
+  // ---------- session broadcast ----------
+  // What a follower is shown. Built from the DISPLAYED values, so a local
+  // transpose or capo change rides along rather than the follower reading a
+  // different key from the person leading.
+  const snapshot = useCallbackSV(() => ({
+    id: song.id, title: song.title, artist: song.artist || '',
+    key: vKey, capo: vCapo, tempo: vTempo, body: vBody,
+  }), [song.id, song.title, song.artist, vKey, vCapo, vTempo, vBody]);
+
+  // Which line is being read right now — the anchor a follower starts from when
+  // the controller pauses or changes song mid-play. Same geometry the scroll
+  // loop uses, read once instead of every frame.
+  const currentLine = useCallbackSV(() => {
+    const el = scrollRef.current, tops = lineTopsRef.current;
+    if (!el || !tops || !tops.length) return 0;
+    const anchorY = el.scrollTop + el.clientHeight * READ_ANCHOR;
+    let idx = 0, lo = 0, hi = tops.length - 1;
+    while (lo <= hi) { const mid = (lo + hi) >> 1; if (tops[mid] <= anchorY) { idx = mid; lo = mid + 1; } else hi = mid - 1; }
+    return idx;
+  }, []);
+
+  // Two emitters, each with a ref guard, because React runs an effect whenever
+  // its deps *look* different and a duplicate push here is not free: it would
+  // send a follower back to line 0 in the middle of a song.
+
+  // 1. A song OPENED — before a note is played. The event followers care most
+  //    about: it is the band turning the page together. Re-fires on a transpose
+  //    (the snapshot changed), so the follower's key never diverges from the
+  //    leader's, and once when a session starts, so a follower joining
+  //    mid-rehearsal gets the current song rather than a blank screen.
+  const sentRef = useRefSV(null);
+  useEffectSV(() => {
+    if (!broadcasting || !onBroadcast) { sentRef.current = null; return; }
+    const snap = snapshot();
+    const id = [snap.id, snap.key, snap.capo, (snap.body || '').length].join('|');
+    if (id === sentRef.current) return;
+    sentRef.current = id;
+    const playing = autoscroll && !countIn;
+    onBroadcast({ song: snap, line: playing ? currentLine() : 0, speed, playing });
+  }, [broadcasting, snapshot, autoscroll, countIn, speed, currentLine]);
+
+  // 2. Play and pause. `autoscroll && !countIn` is the moment scrolling actually
+  //    begins, which is what makes the count-in irrelevant to followers:
+  //    whoever has a metronome tweak on, everyone starts together.
+  const playingRef = useRefSV(null);
+  useEffectSV(() => {
+    if (!broadcasting || !onBroadcast) { playingRef.current = null; return; }
+    const playing = autoscroll && !countIn;
+    // First run after broadcasting turned on: emitter 1 has just said this.
+    if (playingRef.current === null) { playingRef.current = playing; return; }
+    if (playing === playingRef.current) return;
+    playingRef.current = playing;
+    onBroadcast({ song: snapshot(), line: currentLine(), speed, playing });
+  }, [broadcasting, autoscroll, countIn, speed, snapshot, currentLine]);
+
+  // 3. The drift beacon, every 10 s while actually scrolling. It exists because
+  //    a follower's clock is constant-rate while this one is not: density mode
+  //    stretches and compresses the pace line by line, so without a measured
+  //    position the two would slowly part company over a long song.
+  useEffectSV(() => {
+    if (!broadcasting || !onBroadcastTick) return;
+    if (!autoscroll || countIn) return;
+    const id = setInterval(() => onBroadcastTick(currentLine()), 10000);
+    return () => clearInterval(id);
+  }, [broadcasting, autoscroll, countIn, onBroadcastTick, currentLine]);
 
   const effectiveBody = useMemoSV(() => window.IT.transposeBody(vBody, 0), [vBody]);
   const parsedLines = useMemoSV(() => window.IT.parseSong(effectiveBody), [effectiveBody]);
@@ -473,8 +544,11 @@ function SongView({ song, playlist, store, onBack,
         el.scrollTop += px;
         accumRef.current -= px;
         if (el.scrollTop + el.clientHeight >= el.scrollHeight - 1) {
-          setAutoscroll(false);
-          return;
+          // End of the song: hold here rather than dropping out of play mode.
+          // The last line stays put, the controls stay out of the way and the
+          // screen stays awake until the player stops it themselves — and if
+          // they scroll back up (for a repeat), the loop picks up from there.
+          accumRef.current = 0;
         }
       }
       rafRef.current = requestAnimationFrame(tick);
@@ -771,6 +845,16 @@ function SongView({ song, playlist, store, onBack,
                 autoscrolling, so the badge disappears in the maximised
                 performance view — exactly when it would be a distraction. */}
             {store.online === false && <OfflinePill />}
+            {/* You are broadcasting: every song you OPEN is on the followers'
+                screens, not only the ones you play. That is worth a permanent
+                marker, and it is the one-tap way out. */}
+            {broadcasting && (
+              <button type="button" className="sv-live-pill" onClick={onEndBroadcast}
+                      title="You are controlling a session — tap to end it">
+                <Icon name="broadcast" size={13} />
+                <span>Broadcasting</span>
+              </button>
+            )}
             {/* All actions live in the ⋮ menu — both from library and playlist.
                 Read-only (public link) hides it: there's nothing to mutate. */}
             {!readOnly && <IconBtn icon="more" label="More" onClick={(e) => setMenuEl(e.currentTarget)} />}

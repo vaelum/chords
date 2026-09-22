@@ -1060,3 +1060,56 @@ button { font-family: inherit; }
 }
 .section-headline { font-size: 22px; font-weight: 700; letter-spacing: -0.025em; margin: 0 0 4px; }
 .section-sub { color: var(--muted-foreground); font-size: 14px; margin-bottom: 18px; }
+
+/* ---------- playlist sessions ---------- */
+
+/* The stage view: a follower's read-only screen. It borrows .sv-scroll and
+   .sv-content wholesale, so the text sits exactly where it does in the song
+   view — same measure, same margins, same per-device text size — and only the
+   chrome around it differs. */
+.stage-shell { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--background); }
+.stage-head {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 6; background: var(--background);
+}
+.stage-head-text { min-width: 0; }
+.stage-title { font-size: 18px; font-weight: 700; letter-spacing: -0.02em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stage-sub { font-size: 13px; color: var(--muted-foreground);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stage-following { color: var(--primary); font-weight: 600; }
+.stage-paused { font-variant: small-caps; }
+.stage-actions { display: flex; gap: 6px; align-items: center; }
+@media (max-width: 600px) {
+  .stage-head { padding: 10px 12px; gap: 10px; }
+  .stage-title { font-size: 15px; }
+  .stage-sub { font-size: 12px; }
+}
+
+/* You are the controller: every song you OPEN is on other people's screens,
+   not only the ones you play. Hence a standing marker rather than a toast —
+   and tapping it ends the session. */
+.sv-live-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 999px;
+  border: 1px solid var(--primary);
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  color: var(--primary);
+  font-size: 12px; font-weight: 600; line-height: 1;
+  cursor: pointer;
+}
+.sv-live-pill:hover { background: color-mix(in srgb, var(--primary) 22%, transparent); }
+/* The dot in the broadcast glyph pulses, so "live" reads at a glance without
+   anything moving in the reading area. */
+.sv-live-pill svg { animation: stage-pulse 2s ease-in-out infinite; }
+@keyframes stage-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) {
+  .sv-live-pill svg { animation: none; }
+}
+
+.pl-detail-actions { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px; }

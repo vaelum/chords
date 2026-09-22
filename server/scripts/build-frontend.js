@@ -32,7 +32,7 @@ const Babel = require(path.join(FRONTEND, 'vendor', 'babel.min.js'));
 // JSX source files (without extension). These are classic, non-module scripts
 // that share a single global lexical scope and reference React/ReactDOM as
 // globals, so we transform syntax only — no bundling, no module wrapping.
-const FILES = ['icons', 'ui', 'tweaks-panel', 'song-view', 'screens', 'app'];
+const FILES = ['icons', 'ui', 'tweaks-panel', 'song-view', 'stage-view', 'screens', 'app'];
 
 function compile(name) {
   const srcPath = path.join(FRONTEND, name + '.jsx');

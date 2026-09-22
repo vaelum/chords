@@ -497,7 +497,12 @@ function PlaylistsScreen({
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "users",
     size: 10
-  }), " Shared"))), /*#__PURE__*/React.createElement("td", {
+  }), " Shared"), (store.sessions || {})[p.id] && /*#__PURE__*/React.createElement(Badge, {
+    variant: "primary"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "broadcast",
+    size: 10
+  }), " Live"))), /*#__PURE__*/React.createElement("td", {
     className: "t-muted"
   }, p.entries.length), /*#__PURE__*/React.createElement("td", {
     style: {
@@ -635,7 +640,8 @@ function PlaylistDetail({
   playlist,
   store,
   onOpenSong,
-  onBack
+  onBack,
+  onFollow
 }) {
   const pl = playlist;
   // Each entry carries its own playlist-owned copy of the song.
@@ -648,6 +654,27 @@ function PlaylistDetail({
   const [shareLinkOpen, setShareLinkOpen] = useStateS(false);
   const isOwner = store.currentUser && pl.ownerId === store.currentUser.id;
   const toast = useToast();
+
+  // A live session on this playlist, if there is one, and whether THIS device is
+  // the one driving it. Not gated on pl.shared: following your own laptop from
+  // your own phone is the same feature (SESSION-PLAN.md, decision 8).
+  const session = (store.sessions || {})[pl.id] || null;
+  const iControl = !!session && session.controllerClientId === window.IT.clientId;
+  const controllerLabel = !session ? '' : session.controllerUserId === (store.currentUser || {}).id ? 'your other device' : session.controllerName;
+  async function startSession() {
+    try {
+      await store.startSession(pl.id);
+    } catch (err) {
+      if (err.status === 409) toast(`${controllerLabel || 'Another device'} is already running this session`);else toast('Could not start the session');
+    }
+  }
+  async function takeOver() {
+    try {
+      await store.startSession(pl.id, true);
+    } catch (err) {
+      toast('Could not take over the session');
+    }
+  }
   function move(songId, dir) {
     const ids = entries.map(e => e.song.id);
     const i = ids.indexOf(songId);
@@ -688,18 +715,41 @@ function PlaylistDetail({
     title: u.name
   }, u.initials))), /*#__PURE__*/React.createElement("span", {
     className: "t-muted"
-  }, collabs.length, " collaborators \xB7 edits sync to everyone")), isOwner && /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginTop: 14
-    }
-  }, /*#__PURE__*/React.createElement(Btn, {
+  }, collabs.length, " collaborators \xB7 edits sync to everyone")), /*#__PURE__*/React.createElement("div", {
+    className: "pl-detail-actions"
+  }, isOwner && /*#__PURE__*/React.createElement(Btn, {
     variant: "outline",
     size: "sm",
     onClick: () => setShareLinkOpen(true)
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "link",
     size: 14
-  }), " ", pl.publicToken ? 'Share link · active' : 'Share link')))), /*#__PURE__*/React.createElement(ShareLinkDialog, {
+  }), " ", pl.publicToken ? 'Share link · active' : 'Share link'), !session && /*#__PURE__*/React.createElement(Btn, {
+    variant: "outline",
+    size: "sm",
+    onClick: startSession
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "broadcast",
+    size: 14
+  }), " Start session"), session && iControl && /*#__PURE__*/React.createElement(Btn, {
+    variant: "outline",
+    size: "sm",
+    onClick: () => store.endSession(pl.id)
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "broadcast",
+    size: 14
+  }), " End session"), session && !iControl && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(Btn, {
+    variant: "primary",
+    size: "sm",
+    onClick: () => onFollow(pl.id)
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "broadcast",
+    size: 14
+  }), " Follow ", controllerLabel), /*#__PURE__*/React.createElement(Btn, {
+    variant: "outline",
+    size: "sm",
+    onClick: takeOver
+  }, "Take over"))))), /*#__PURE__*/React.createElement(ShareLinkDialog, {
     open: shareLinkOpen,
     playlist: pl,
     store: store,
@@ -2882,7 +2932,11 @@ function ImportScreen({
 // playlist: title + artist, case-insensitive and whitespace-normalized.
 function songKey(title, artist) {
   const n = s => (s || '').trim().toLowerCase().replace(/\s+/g, ' ');
-  return `${n(title)} ${n(artist)}`;
+  // \u0000 rather than a literal NUL byte: the character is the point (no title
+  // or artist can contain it, so the key is unambiguous), but writing it raw made
+  // this whole file binary to grep — searches for anything in it silently found
+  // nothing.
+  return `${n(title)}\u0000${n(artist)}`;
 }
 function ImportPanel({
   onExtracted,

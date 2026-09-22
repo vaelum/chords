@@ -29,6 +29,7 @@ from .routers.invites import router as invites_router
 from .routers.transfer import router as transfer_router
 from .routers.events import router as events_router
 from .routers.public import router as public_router
+from .routers.sessions import router as sessions_router
 from .version import BUILD_ID
 
 FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
@@ -83,6 +84,7 @@ app.include_router(invites_router, prefix="/api")
 app.include_router(transfer_router, prefix="/api")
 app.include_router(events_router, prefix="/api")
 app.include_router(public_router, prefix="/api")
+app.include_router(sessions_router, prefix="/api")
 
 @app.get("/api/version", include_in_schema=False)
 async def version():

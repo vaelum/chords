@@ -336,3 +336,54 @@ class SharePlaylistRequest(_Base):
     user_ids: List[str]
     note: Optional[str] = None
     mode: str = "copy"   # 'copy' (send a copy) | 'shared' (invite to collaborate)
+
+
+# ---------------------------------------------------------------------------
+# Playlist sessions (in-memory; see session_state.py)
+# ---------------------------------------------------------------------------
+
+class SessionSongSnapshot(_Base):
+    """The song as the controller has it on screen — body included, and already
+    transposed if the controller transposed it. Sent instead of an id because
+    the controller may open a song no follower is allowed to fetch."""
+    id: Optional[str] = None
+    title: str = ""
+    artist: Optional[str] = None
+    key: Optional[str] = None
+    capo: Optional[int] = None
+    tempo: Optional[int] = None
+    body: str = ""
+
+
+class SessionNowOut(_Base):
+    song: SessionSongSnapshot
+    speed: float = 1.0
+    line: float = 0.0
+    playing: bool = False          # false for a song the controller merely opened
+    since: float = 0.0             # server clock at the anchor, for drift maths
+
+
+class SessionOut(_Base):
+    playlist_id: str
+    controller_user_id: str
+    controller_client_id: str      # so a device can tell whether IT is driving
+    controller_name: str
+    started_at: float
+    version: int
+    now: Optional[SessionNowOut] = None
+
+
+class SessionStartRequest(_Base):
+    takeover: bool = False
+
+
+class SessionNowUpdate(_Base):
+    song: SessionSongSnapshot
+    line: float = 0.0
+    speed: float = 1.0
+    playing: bool = False
+
+
+class SessionTickUpdate(_Base):
+    line: float
+    playing: bool = True
