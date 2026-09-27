@@ -239,11 +239,13 @@ function StageView({ playlist, session, store, onBack,
         </div>
       )}
 
-      {/* Where the leader has play controls, a follower has the two numbers it
-          is being played at and cannot change. The key is the one the leader is
-          actually on — transposed, if they transposed it (song-view.jsx builds
-          the snapshot from its DISPLAYED values) — so it is what everyone in
-          the room is hearing rather than what the file says.
+      {/* Where the leader has play controls, a follower has the numbers it is
+          being played at and cannot change. The key and the capo are the ones
+          the leader is actually on — transposed or re-capoed, if they changed
+          them (song-view.jsx builds the snapshot from its DISPLAYED values) —
+          so they are what everyone in the room is playing rather than what the
+          file says. The capo shows even at 0: "no capo" is an answer, and a
+          missing number would read as not knowing.
 
           The text controls moved down here from the header to sit beside them:
           they are this device's own, they are the only things on this screen
@@ -261,6 +263,10 @@ function StageView({ playlist, session, store, onBack,
               <div className="stage-meta">
                 <span className="label">Key</span>
                 <span className="val">{song.key || '—'}</span>
+              </div>
+              <div className="stage-meta">
+                <span className="label">Capo</span>
+                <span className="val">{song.capo || 0}</span>
               </div>
               <div className="stage-meta">
                 <span className="label">BPM</span>

@@ -276,6 +276,12 @@ function StageView({
     className: "stage-meta"
   }, /*#__PURE__*/React.createElement("span", {
     className: "label"
+  }, "Capo"), /*#__PURE__*/React.createElement("span", {
+    className: "val"
+  }, song.capo || 0)), /*#__PURE__*/React.createElement("div", {
+    className: "stage-meta"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "label"
   }, "BPM"), /*#__PURE__*/React.createElement("span", {
     className: "val"
   }, song.tempo || '—')))), /*#__PURE__*/React.createElement("div", {

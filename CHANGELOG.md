@@ -8,6 +8,26 @@ Each released version below has a `## [x.y.z]` heading. The release workflow
 extracts the section matching the pushed tag (`vx.y.z`) and uses it as the
 release body, on Forgejo and then on GitHub — so keep these sections accurate
 before tagging.
+## [2026.9.7]
+
+### Changed
+
+- **A follower's stage view shows the capo as well.** The bar at the foot now
+  reads Key, Capo and BPM. Like the key, the capo is the one the leader is
+  using, including any change they made on their own screen. It reads 0 when
+  there is no capo, so a follower never has to guess.
+
+- **Password managers on Android see chords, not "tauri.localhost".** The
+  Android app now runs from its own address, `chords.localhost`, instead of
+  the one every Tauri app shares. Bitwarden used to file chords logins under
+  "tauri.localhost" and would suggest them in any other Tauri app.
+  **After updating, the Android app asks for the server address and your login
+  once more,** and text size, margins and the other display settings go back
+  to their defaults. Your songs and playlists are on the server and come back
+  as soon as you log in. If a password manager keeps your chords login under
+  `tauri.localhost`, change that entry's address to `chords.localhost`.
+  Desktop apps are unchanged.
+
 ## [2026.9.6]
 
 ### Changed
