@@ -1085,6 +1085,26 @@ button { font-family: inherit; }
 .stage-following { color: var(--primary); font-weight: 600; }
 .stage-paused { font-variant: small-caps; }
 .stage-actions { display: flex; gap: 6px; align-items: center; }
+
+/* The follower's bottom bar. Same .autoscroll-bar shell as the song view's, so
+   the controls sit in the same place on both screens — what differs is that a
+   follower's numbers are a read-out, not buttons: there is nothing here it is
+   allowed to change about the song. */
+.stage-wait { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.stage-wait > .empty { width: 100%; max-width: 520px; }
+.stage-meta {
+  display: inline-flex; align-items: baseline; gap: 8px;
+  padding: 0 10px 0 0;
+}
+.stage-meta .label {
+  font-size: 11px; font-weight: 600; color: var(--muted-foreground);
+  text-transform: uppercase; letter-spacing: .06em;
+}
+.stage-meta .val { font-family: var(--font-mono); font-size: 16px; font-weight: 700; }
+@media (max-width: 600px) {
+  .stage-meta { gap: 6px; padding-right: 6px; }
+  .stage-meta .val { font-size: 15px; }
+}
 @media (max-width: 600px) {
   .stage-head { padding: 10px 12px; gap: 10px; }
   .stage-title { font-size: 15px; }

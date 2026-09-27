@@ -214,16 +214,16 @@ function StageView({ playlist, session, store, onBack,
         </div>
         <div className="stage-actions">
           {store.online === false && <OfflinePill />}
-          <IconBtn icon="minus" label="Smaller text" onClick={() => setSize(lyricSize - 1)} />
-          <IconBtn icon="plus" label="Bigger text" onClick={() => setSize(lyricSize + 1)} />
-          <IconBtn icon="spacing" label="Margins"
-                   onClick={() => setSide(sideSpace >= 96 ? 0 : sideSpace + 24)} />
         </div>
       </div>
 
+      {/* Fills the space the song would take, so the bar below stays on the
+          floor rather than floating under the empty state. */}
       {!song && (
-        <Empty icon="broadcast" title="Waiting for the first song"
-               desc={`${following === 'your other device' ? 'Your other device' : following} hasn't opened a song yet.`} />
+        <div className="stage-wait">
+          <Empty icon="broadcast" title="Waiting for the first song"
+                 desc={`${following === 'your other device' ? 'Your other device' : following} hasn't opened a song yet.`} />
+        </div>
       )}
 
       {/* This element is not the viewer's to move: it mirrors another device.
@@ -238,6 +238,54 @@ function StageView({ playlist, session, store, onBack,
           <SongBody lines={parsedLines} lyricSize={lyricSize} contentRef={contentRef} />
         </div>
       )}
+
+      {/* Where the leader has play controls, a follower has the two numbers it
+          is being played at and cannot change. The key is the one the leader is
+          actually on — transposed, if they transposed it (song-view.jsx builds
+          the snapshot from its DISPLAYED values) — so it is what everyone in
+          the room is hearing rather than what the file says.
+
+          The text controls moved down here from the header to sit beside them:
+          they are this device's own, they are the only things on this screen
+          anybody may touch, and at the bottom they are within thumb reach of a
+          phone on a stand. Same bar as the song view's, so the two screens do
+          not disagree about where the controls live.
+
+          It shrinks while the song plays, as the song view's does — but it
+          keeps its buttons: a follower cannot stop the scrolling to reach them,
+          so hiding them would take them away for the length of the song. */}
+      <div className={`autoscroll-bar stage-bar${playing ? ' playing' : ''}`}>
+        <div className="as-left">
+          {song && (
+            <>
+              <div className="stage-meta">
+                <span className="label">Key</span>
+                <span className="val">{song.key || '—'}</span>
+              </div>
+              <div className="stage-meta">
+                <span className="label">BPM</span>
+                <span className="val">{song.tempo || '—'}</span>
+              </div>
+            </>
+          )}
+        </div>
+        <div className="as-group" />
+        <div className="as-right">
+          <button className="as-icon-btn" onClick={() => setSize(lyricSize - 1)}
+                  aria-label="Smaller text" title="Smaller text">
+            <Icon name="minus" size={16} />
+          </button>
+          <button className="as-icon-btn" onClick={() => setSize(lyricSize + 1)}
+                  aria-label="Bigger text" title="Bigger text">
+            <Icon name="plus" size={16} />
+          </button>
+          <button className="as-icon-btn"
+                  onClick={() => setSide(sideSpace >= 96 ? 0 : sideSpace + 24)}
+                  aria-label="Margins" title="Margins">
+            <Icon name="spacing" size={16} />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

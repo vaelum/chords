@@ -8,6 +8,22 @@ Each released version below has a `## [x.y.z]` heading. The release workflow
 extracts the section matching the pushed tag (`vx.y.z`) and uses it as the
 release body, on Forgejo and then on GitHub — so keep these sections accurate
 before tagging.
+## [2026.9.6]
+
+### Changed
+
+- **A follower's stage view shows the key and the tempo it is being played at.**
+  A bar at the foot of the screen reads out the leader's key and BPM. If the
+  leader transposed the song, it shows the transposed key, which is what the
+  room is actually hearing. The numbers are a read-out, because a follower
+  cannot change them.
+
+- **The text controls moved into that bar.** Smaller text, bigger text and the
+  margins used to sit in the header. They are now at the bottom, within thumb
+  reach of a phone on a stand, in the same place as on the song view. The bar
+  shrinks while the song plays but keeps its buttons: a follower cannot stop the
+  scrolling to reach them.
+
 ## [2026.9.5]
 
 ### Changed

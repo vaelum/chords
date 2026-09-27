@@ -245,23 +245,13 @@ function StageView({
     className: "stage-paused"
   }, " \xB7 paused") : null)), /*#__PURE__*/React.createElement("div", {
     className: "stage-actions"
-  }, store.online === false && /*#__PURE__*/React.createElement(OfflinePill, null), /*#__PURE__*/React.createElement(IconBtn, {
-    icon: "minus",
-    label: "Smaller text",
-    onClick: () => setSize(lyricSize - 1)
-  }), /*#__PURE__*/React.createElement(IconBtn, {
-    icon: "plus",
-    label: "Bigger text",
-    onClick: () => setSize(lyricSize + 1)
-  }), /*#__PURE__*/React.createElement(IconBtn, {
-    icon: "spacing",
-    label: "Margins",
-    onClick: () => setSide(sideSpace >= 96 ? 0 : sideSpace + 24)
-  }))), !song && /*#__PURE__*/React.createElement(Empty, {
+  }, store.online === false && /*#__PURE__*/React.createElement(OfflinePill, null))), !song && /*#__PURE__*/React.createElement("div", {
+    className: "stage-wait"
+  }, /*#__PURE__*/React.createElement(Empty, {
     icon: "broadcast",
     title: "Waiting for the first song",
     desc: `${following === 'your other device' ? 'Your other device' : following} hasn't opened a song yet.`
-  }), song && /*#__PURE__*/React.createElement("div", {
+  })), song && /*#__PURE__*/React.createElement("div", {
     className: "sv-scroll stage-scroll",
     ref: scrollRef,
     tabIndex: -1,
@@ -272,6 +262,50 @@ function StageView({
     lines: parsedLines,
     lyricSize: lyricSize,
     contentRef: contentRef
-  })));
+  })), /*#__PURE__*/React.createElement("div", {
+    className: `autoscroll-bar stage-bar${playing ? ' playing' : ''}`
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "as-left"
+  }, song && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "stage-meta"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "label"
+  }, "Key"), /*#__PURE__*/React.createElement("span", {
+    className: "val"
+  }, song.key || '—')), /*#__PURE__*/React.createElement("div", {
+    className: "stage-meta"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "label"
+  }, "BPM"), /*#__PURE__*/React.createElement("span", {
+    className: "val"
+  }, song.tempo || '—')))), /*#__PURE__*/React.createElement("div", {
+    className: "as-group"
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "as-right"
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "as-icon-btn",
+    onClick: () => setSize(lyricSize - 1),
+    "aria-label": "Smaller text",
+    title: "Smaller text"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "minus",
+    size: 16
+  })), /*#__PURE__*/React.createElement("button", {
+    className: "as-icon-btn",
+    onClick: () => setSize(lyricSize + 1),
+    "aria-label": "Bigger text",
+    title: "Bigger text"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "plus",
+    size: 16
+  })), /*#__PURE__*/React.createElement("button", {
+    className: "as-icon-btn",
+    onClick: () => setSide(sideSpace >= 96 ? 0 : sideSpace + 24),
+    "aria-label": "Margins",
+    title: "Margins"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "spacing",
+    size: 16
+  })))));
 }
 window.StageView = StageView;

@@ -106,6 +106,23 @@ id = "chords-importer@vaelum.de"
 min_version = "115.0"
 
 # --------------------------------------------------------------------------- #
+# release — cut a version and take it out
+# --------------------------------------------------------------------------- #
+
+# `python butler.py release <version>` does the whole cycle: dev onto main as
+# one commit, the tag, the push, the wait for the build that publishes the
+# Forgejo release, then the export and the copy of that release onto GitHub.
+# `--check` prints the plan and changes nothing.
+[release]
+# This history reads "release 2026.9.3", not "chords 2026.9.3".
+message       = "release {version}"
+# The Tauri bundles take their name from this file, not from the git tag, so a
+# version left behind here ships an AppImage and an installer labelled with the
+# PREVIOUS release — which is exactly what v2026.9.2 did. The preflight refuses
+# the cut instead of finding out afterwards.
+version_files = ["app/src-tauri/tauri.conf.json"]
+
+# --------------------------------------------------------------------------- #
 # publish — Copybara export to the public GitHub mirror
 # --------------------------------------------------------------------------- #
 
@@ -124,11 +141,9 @@ min_version = "115.0"
 # onto the public tag rather than building it again. The order is:
 #
 #   git push origin main v1.2.3     # wait for the build to publish its release
-#   python butler.py publish --tag v1.2.3[release]
-# This history reads "release 2026.9.3", not "chords 2026.9.3".
-message       = "release {version}"
-# The Tauri bundles take their name from this file, not from the git tag, so a
-# version left behind here ships an AppImage and an installer labelled with the
-# PREVIOUS release — which is exactly what v2026.9.2 did. The preflight refuses
-# the cut instead of finding out afterwards.
-version_files = ["app/src-tauri/tauri.conf.json"]
+#   python butler.py publish --tag v1.2.3
+#
+# Last in the file, on purpose: the export strips this table from the published
+# butler.toml up to the next table header, and takes the comments above that
+# header with it. Through harness 0.8.4 it also glued that header onto a comment
+# line, which is how the mirror's copy came to read "publish --tag v1.2.3[release]".
