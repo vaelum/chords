@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import sys
 from contextlib import asynccontextmanager
@@ -19,6 +20,7 @@ if not _chords_log.handlers:
     _chords_log.addHandler(_h)
     _chords_log.propagate = False
 
+from . import session_state
 from .startup import init_db, init_secrets, create_admin_if_needed
 from .routers.users import router as users_router, auth_router
 from .routers.songs import router as songs_router
@@ -57,12 +59,27 @@ _INDEX_HTML = (
 )
 
 
+async def _sweep_sessions() -> None:
+    """Expire idle playlist sessions on a clock, so the end is announced to their
+    followers even when nobody asks about the session again."""
+    while True:
+        await asyncio.sleep(60)
+        try:
+            await asyncio.to_thread(session_state.sweep_expired)
+        except Exception:  # noqa: BLE001 - one bad sweep must not end the loop
+            logging.getLogger(__name__).exception("session sweep failed")
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
     init_secrets()
     create_admin_if_needed()
-    yield
+    sweeper = asyncio.create_task(_sweep_sessions())
+    try:
+        yield
+    finally:
+        sweeper.cancel()
 
 
 app = FastAPI(title="chords API", version="0.1.0", lifespan=lifespan)

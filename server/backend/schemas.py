@@ -361,6 +361,9 @@ class SessionNowOut(_Base):
     line: float = 0.0
     playing: bool = False          # false for a song the controller merely opened
     since: float = 0.0             # server clock at the anchor, for drift maths
+    # Seconds since `line` was measured, by the server's clock alone: a follower
+    # places its anchor at (arrival - age) without comparing two machines' clocks.
+    age: float = 0.0
 
 
 class SessionOut(_Base):
@@ -382,8 +385,16 @@ class SessionNowUpdate(_Base):
     line: float = 0.0
     speed: float = 1.0
     playing: bool = False
+    # The controller's own count of its writes, so one overtaken on the way is
+    # refused instead of rolling the session back. Absent from older clients.
+    seq: Optional[int] = None
 
 
 class SessionTickUpdate(_Base):
     line: float
     playing: bool = True
+    # The song the line was measured on, the pace, and the write's number (see
+    # SessionNowUpdate). All absent from older clients, whose ticks still work.
+    song_id: Optional[str] = None
+    speed: Optional[float] = None
+    seq: Optional[int] = None

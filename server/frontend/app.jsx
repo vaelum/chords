@@ -233,6 +233,13 @@ function useStore() {
   // off that, never off the server's `since`, which is a different machine's
   // wall clock.
   const [sessions, setSessions] = useStateA({});
+  // The same map for the event handler, which outlives renders: whether a tick
+  // applies depends on what is held when it arrives.
+  const sessionsRef = useRefA(sessions);
+  sessionsRef.current = sessions;
+  // This device's count of its writes to a session it controls (the server
+  // refuses one that a later one overtook on the way).
+  const sessionSeqRef = useRefA(0);
   // Flips true when the SSE stream reports a build id newer than the one this
   // page loaded (see LOADED_BUILD) — i.e. a deploy happened under us.
   const [updateReady, setUpdateReady] = useStateA(false);
@@ -539,42 +546,46 @@ function useStore() {
   // A session is broadcast state, not a record: one device drives, every other
   // device of every collaborator follows. See SESSION-PLAN.md.
 
-  // Stamp each session with the local time it arrived. The wire carries the
-  // server's `since`; subtracting one machine's clock from another's is how you
-  // get a song that starts four seconds in.
-  function _stamp(session) {
-    return session ? { ...session, at: Date.now() } : session;
-  }
-
+  // What a follower does with a snapshot or an event is decided in
+  // session-sync.js, where it can be run against a flaky network; this file
+  // only carries it out.
+  const SS = window.SessionSync;
   function _indexSessions(list) {
-    const out = {};
-    (list || []).forEach(s => { out[s.playlistId] = _stamp(s); });
-    return out;
+    return window.SessionSync.index(list, Date.now());
   }
 
   const refetchSession = useCallbackA(async (id) => {
     try {
       const s = await window.IT.api(`/playlists/${id}/session`);
-      setSessions(m => ({ ...m, [id]: _stamp(s) }));
+      setSessions(m => SS.applySnapshot(m, id, s, Date.now()));
       return s;
     } catch (err) {
       // 404 is the ordinary end of a session, not a failure: it was ended, it
       // expired, or the playlist stopped being mine.
-      if (err.status === 404) setSessions(m => { const n = { ...m }; delete n[id]; return n; });
+      if (err.status === 404) setSessions(m => SS.remove(m, id));
       return null;
     }
+  }, []);
+
+  // Every live session at once, after a reconnect: a song change, an end or a
+  // take-over published while the stream was down was never heard.
+  const refetchSessions = useCallbackA(async () => {
+    try {
+      const list = await window.IT.api('/sessions');
+      setSessions(m => SS.reconcile(m, list, Date.now()));
+    } catch (err) { /* the next reconnect tries again */ }
   }, []);
 
   const startSession = useCallbackA(async (id, takeover = false) => {
     const s = await window.IT.api(`/playlists/${id}/session`, {
       method: 'POST', body: { takeover },
     });
-    setSessions(m => ({ ...m, [id]: _stamp(s) }));
+    setSessions(m => SS.applySnapshot(m, id, s, Date.now()));
     return s;
   }, []);
 
   const endSession = useCallbackA(async (id) => {
-    setSessions(m => { const n = { ...m }; delete n[id]; return n; });
+    setSessions(m => SS.remove(m, id));
     try { await window.IT.api(`/playlists/${id}/session`, { method: 'DELETE' }); }
     catch (e) { /* already gone is the same outcome */ }
   }, []);
@@ -583,21 +594,28 @@ function useStore() {
   // is played — so a follower sees the page turn, not the previous song.
   const pushNow = useCallbackA(async (id, body) => {
     try {
-      const s = await window.IT.api(`/playlists/${id}/session/now`, { method: 'PUT', body });
-      setSessions(m => ({ ...m, [id]: _stamp(s) }));
+      const s = await window.IT.api(`/playlists/${id}/session/now`, {
+        method: 'PUT', body: { ...body, seq: ++sessionSeqRef.current },
+      });
+      setSessions(m => SS.applySnapshot(m, id, s, Date.now()));
       return s;
     } catch (err) {
       // Lost control (someone took over) or the session is gone: stop guessing
-      // and take the server's word for it.
+      // and take the server's word for it. (412 is a write a newer one
+      // overtook: nothing to do.)
       if (err.status === 409 || err.status === 404) refetchSession(id);
       return null;
     }
   }, [refetchSession]);
 
-  const pushTick = useCallbackA(async (id, line, playing) => {
+  // The controller's position. `songId` and `speed` say which song the line
+  // was measured on and at what pace (song-view.jsx); a tick for a song that is
+  // no longer on screen is refused with 412, and dropped here.
+  const pushTick = useCallbackA(async (id, line, playing, { songId, speed } = {}) => {
     try {
       await window.IT.api(`/playlists/${id}/session/tick`, {
-        method: 'POST', body: { line, playing },
+        method: 'POST',
+        body: { line, playing, songId, speed, seq: ++sessionSeqRef.current },
       });
     } catch (err) {
       if (err.status === 409 || err.status === 404) refetchSession(id);
@@ -731,9 +749,13 @@ function useStore() {
       // (Once true it stays true; reconnect churn can't unset it.)
       if (evt.type === 'hello') {
         if (LOADED_BUILD && evt.build && evt.build !== LOADED_BUILD) setUpdateReady(true);
-        // The stream is up, so we're online again — if we'd been offline, pull
-        // fresh data (the poll below may also be racing this; first one wins).
-        if (!onlineRef.current) _reconnect().catch(() => {});
+        // The stream is up. If we'd been offline, pull fresh data (the poll
+        // below may also be racing this; first one wins). Either way the live
+        // sessions are re-fetched: nothing published while the stream was down
+        // is replayed, and a deploy's 502s never made us think we were offline.
+        const act = SS.onEvent(evt, { online: onlineRef.current });
+        if (act && act.kind === 'resync') _reconnect().catch(() => {});
+        else if (act && act.kind === 'resync-sessions') refetchSessions();
         return;
       }
       // Skip the echo of a change this very tab made (it already updated locally).
@@ -743,21 +765,14 @@ function useStore() {
       else if (evt.type === 'songs') refetchSongs();
       else if (evt.type === 'playlist' && evt.id) refetchPlaylist(evt.id);
       else if (evt.type === 'playlists') refetchPlaylists();
-      // A session changed hands, opened a song, played or paused: re-fetch, the
-      // house style — the snapshot comes with it.
-      else if (evt.type === 'session' && evt.id) refetchSession(evt.id);
-      // The one event that carries its payload (events.py says why): move the
-      // anchor of a session we already hold, and stamp it with local time.
-      else if (evt.type === 'session-tick' && evt.id) {
-        setSessions(m => {
-          const cur = m[evt.id];
-          if (!cur || !cur.now) return m;
-          return {
-            ...m,
-            [evt.id]: { ...cur, at: Date.now(),
-                        now: { ...cur.now, line: evt.line, playing: evt.playing } },
-          };
-        });
+      // A session changed hands, opened a song, played or paused (re-fetch,
+      // the house style), or the drift beacon moved its anchor (events.py says
+      // why that one carries its payload).
+      else if (evt.type === 'session' || evt.type === 'session-tick') {
+        const act = SS.onEvent(evt, { online: onlineRef.current,
+                                      held: sessionsRef.current[evt.id] });
+        if (act && act.kind === 'refetch') refetchSession(act.id);
+        else if (act && act.kind === 'tick') setSessions(m => SS.applyTick(m, act.evt, Date.now()));
       }
     };
 
@@ -1287,8 +1302,8 @@ function AppShell({ store, tweaks, setTweaks }) {
   // controller's real position is not "anchor + elapsed x pace" — density mode
   // varies the pace line by line — so only the view that measured the scroll
   // knows which line is actually being read.
-  const onBroadcastTick = useCallbackA((line, playing) => {
-    if (controlling) store.pushTick(controlling, line, playing);
+  const onBroadcastTick = useCallbackA((line, playing, at) => {
+    if (controlling) store.pushTick(controlling, line, playing, at);
   }, [controlling, store.pushTick]);
 
   const goStage = (playlistId) => navigate({ name: 'stage', playlistId });

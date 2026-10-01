@@ -525,7 +525,20 @@ function SongView({
     return idx + frac;
   }, []);
 
-  // Two emitters, each with a ref guard, because React runs an effect whenever
+  // A tick says which song its line was measured on and at what pace, so the
+  // server can refuse one that arrives after the next song's snapshot, and a
+  // follower learns of a speed change. The speed is read through a ref because
+  // the 10 s beacon's interval outlives any one render.
+  const speedRef = useRefSV(speed);
+  speedRef.current = speed;
+  const sendTick = useCallbackSV((line, playing) => {
+    if (onBroadcastTick) onBroadcastTick(line, playing, {
+      songId: song.id,
+      speed: speedRef.current
+    });
+  }, [onBroadcastTick, song.id]);
+
+  // The emitters each have a ref guard, because React runs an effect whenever
   // its deps *look* different and a duplicate push here is not free: it would
   // send a follower back to line 0 in the middle of a song.
 
@@ -541,13 +554,21 @@ function SongView({
       return;
     }
     const snap = snapshot();
-    const id = [snap.id, snap.key, snap.capo, (snap.body || '').length].join('|');
-    if (id === sentRef.current) return;
-    sentRef.current = id;
+    // The whole snapshot, not a few fields of it: a tempo, a title or an edit
+    // that leaves the body's length alone must reach followers too.
+    const id = JSON.stringify(snap);
+    if (sentRef.current && id === sentRef.current.id) return;
+    // The same song re-sent (a transpose, a tempo) keeps the place being read;
+    // only a song just opened starts a paused follower at the top.
+    const sameSong = !!sentRef.current && sentRef.current.song === snap.id;
+    sentRef.current = {
+      id,
+      song: snap.id
+    };
     const playing = autoscroll && !countIn;
     onBroadcast({
       song: snap,
-      line: playing ? currentLine() : 0,
+      line: playing || sameSong ? currentLine() : 0,
       speed,
       playing
     });
@@ -585,9 +606,9 @@ function SongView({
   useEffectSV(() => {
     if (!broadcasting || !onBroadcastTick) return;
     if (!autoscroll || countIn) return;
-    const id = setInterval(() => onBroadcastTick(currentLine(), true), 10000);
+    const id = setInterval(() => sendTick(currentLine(), true), 10000);
     return () => clearInterval(id);
-  }, [broadcasting, autoscroll, countIn, onBroadcastTick, currentLine]);
+  }, [broadcasting, autoscroll, countIn, onBroadcastTick, sendTick, currentLine]);
 
   // 4. Position while NOT advancing on its own — scrolling a paused song by
   //    hand, and the manual-scroll pause that interrupts autoscroll. Without
@@ -617,7 +638,7 @@ function SongView({
       if (line === sentLine && playing === sentPlaying) return;
       sentLine = line;
       sentPlaying = playing;
-      onBroadcastTick(line, playing);
+      sendTick(line, playing);
     };
     const onScroll = () => {
       // Advancing and already reported as such: the beacon owns this.
@@ -632,7 +653,26 @@ function SongView({
       el.removeEventListener('scroll', onScroll);
       if (timer) clearTimeout(timer);
     };
-  }, [broadcasting, autoscroll, countIn, onBroadcastTick, currentLine]);
+  }, [broadcasting, autoscroll, countIn, onBroadcastTick, sendTick, currentLine]);
+
+  // 5. A change of speed. Followers run their own clock at the leader's pace,
+  //    so a faster leader that did not say so would leave them behind (or, if
+  //    slower, ahead and snapping back) until the next song.
+  const sentSpeedRef = useRefSV(null);
+  useEffectSV(() => {
+    if (!broadcasting || !onBroadcastTick) {
+      sentSpeedRef.current = null;
+      return;
+    }
+    // First run after broadcasting turned on: emitter 1's snapshot carries it.
+    if (sentSpeedRef.current === null) {
+      sentSpeedRef.current = speed;
+      return;
+    }
+    if (speed === sentSpeedRef.current) return;
+    sentSpeedRef.current = speed;
+    sendTick(currentLine(), autoscroll && !countIn);
+  }, [broadcasting, speed, onBroadcastTick, sendTick, currentLine, autoscroll, countIn]);
   const effectiveBody = useMemoSV(() => window.IT.transposeBody(vBody, 0), [vBody]);
   const parsedLines = useMemoSV(() => window.IT.parseSong(effectiveBody), [effectiveBody]);
   const chords = useMemoSV(() => window.IT.extractChords(effectiveBody), [effectiveBody]);

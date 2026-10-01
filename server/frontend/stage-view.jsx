@@ -19,18 +19,8 @@ const { useState: useStateST, useEffect: useEffectST, useRef: useRefST,
 // so the controller and the follower are reading at the same place on the page.
 const STAGE_ANCHOR = 0.35;
 
-// Drift beyond this many lines is corrected; below it, left alone. A follower
-// that answered every tick would twitch six times a minute for no reason.
-const DRIFT_LINES = 1.5;
-// How much faster than the song's own pace a correction may run: a catch-up is
-// meant to be unnoticeable, so half again as fast, not a lurch.
-const CATCHUP = 0.5;
-// Per-second lerp toward a paused anchor. ~6 covers a hand-scroll's worth of
-// movement in a couple of hundred milliseconds without ever looking abrupt.
-const GLIDE = 6;
-// Beyond this the leader did not drift, they MOVED — a new song, a fling back
-// to the top — and following means going there at once rather than gliding.
-const BACK_JUMP = 8;
+// How the follower's clock steers toward the leader (drift, catch-up, glide,
+// the jump back) is in session-sync.js, where it runs under node too.
 
 function StageView({ playlist, session, store, onBack,
                     lyricSize, setLyricSize, sideSpace, setSideSpace }) {
@@ -39,8 +29,9 @@ function StageView({ playlist, session, store, onBack,
   const lineTopsRef = useRefST([]);
   const linesHRef = useRefST(0);
   const rafRef = useRefST(0);
-  // The follower's own clock: which line it believes it is on, as a float.
-  const lineRef = useRefST(0);
+  // The follower's own clock: which line it believes it is on, as a float, and
+  // on which song — kept across songs, so the step can tell a new one.
+  const clockRef = useRefST({ line: 0, song: null });
 
   const now = session ? session.now : null;
   const song = now ? now.song : null;
@@ -121,57 +112,33 @@ function StageView({ playlist, session, store, onBack,
   }, []);
 
   // The last anchor heard, kept in a ref so the loop reads it without being
-  // torn down and restarted on every tick. `at` is when THIS device heard it —
-  // never the server's `since`, which is another machine's clock.
+  // torn down and restarted on every tick. `at` is when THIS device heard it,
+  // less the age the server gave the line — never the server's `since`, which
+  // is another machine's clock.
   const anchorRef = useRefST(null);
   useEffectST(() => {
     anchorRef.current = now
-      ? { line: now.line, playing, speed, at: session.at || Date.now(),
-          song: now.song && now.song.id }
+      ? window.SessionSync.anchorOf({ ...session, at: session.at || Date.now() })
       : null;
   }, [now && now.since, now && now.line, now && now.song && now.song.id,
-      playing, speed, session && session.at]);
+      playing, speed, session && session.at, session && session.version]);
 
   // One loop for both states, which is what makes the follow smooth: there is
-  // no second code path that can write a conflicting scrollTop.
-  //
-  //   playing — run our own clock at the shared pace and correct toward the
-  //             leader only FORWARD. A correction backwards is what reads as a
-  //             jump: the leader's reported line is always a little behind ours
-  //             (it is measured, then travels), so "catch up" in both
-  //             directions means twitching against the network. Being a
-  //             fraction of a line early is invisible; going back a line is not.
-  //   paused  — glide toward the anchor. The leader scrolling a paused song by
-  //             hand sends a few anchors a second, and gliding turns those into
-  //             one continuous movement instead of a flick-book.
-  //
-  // A jump back only happens when the leader really did jump: a new song, or a
-  // fling back to the top. That is BACK_JUMP lines away and snaps deliberately.
+  // no second code path that can write a conflicting scrollTop. What each frame
+  // does — forward-only correction while playing, a glide while paused, a snap
+  // when the leader really jumped — is SessionSync.step.
   useEffectST(() => {
     if (!song) return;
     let last = 0;
+    const clock = clockRef.current;
     const tick = (ts) => {
       rafRef.current = requestAnimationFrame(tick);
       const a = anchorRef.current;
       if (!a) return;
       if (!last) last = ts;
-      const dt = Math.min(0.1, (ts - last) / 1000);   // a backgrounded tab must not lurch
+      const dt = (ts - last) / 1000;
       last = ts;
-      const pace = a.speed * 0.5;
-      const want = a.playing ? a.line + ((Date.now() - a.at) / 1000) * pace : a.line;
-      let line = lineRef.current;
-      const diff = want - line;
-      if (a.playing) {
-        line += dt * pace;                       // our own clock, at the shared pace
-        if (diff > DRIFT_LINES) line += Math.min(diff - DRIFT_LINES, dt * pace * CATCHUP);
-        else if (diff < -BACK_JUMP) line = want; // the leader went back on purpose
-      } else if (Math.abs(diff) > BACK_JUMP) {
-        line = want;                             // a new song, or a fling
-      } else {
-        line += diff * Math.min(1, dt * GLIDE);
-      }
-      lineRef.current = line;
-      scrollToLine(line);
+      scrollToLine(window.SessionSync.step(clock, a, dt, Date.now()));
     };
     rafRef.current = requestAnimationFrame(tick);
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); rafRef.current = 0; };

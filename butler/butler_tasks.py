@@ -266,15 +266,18 @@ def _print_admin_login(ctx, remote):
 
 
 # --------------------------------------------------------------------------- #
-# import-pipeline tests
+# server tests
 # --------------------------------------------------------------------------- #
 
-@task("server.test", help="run the import-pipeline tests",
+@task("server.test", help="run the server tests: import pipeline, browser, sessions",
       args=[
           arg("--live", action="store_true",
               help="also run the real-API suite (~$0.01 of OpenRouter credit)"),
           arg("--live-only", action="store_true",
               help="skip the offline suite and run only the live one"),
+          arg("--e2e", action="store_true",
+              help="also run the two-browser session test (~2 min, needs "
+                   "Playwright's Chromium)"),
           arg("--only", metavar="NAMES",
               help="live suite: comma-separated subset "
                    "(catalog,parse,scan,auto,search,vision)"),
@@ -282,9 +285,15 @@ def _print_admin_login(ctx, remote):
 def server_test(ctx, args):
     """Offline by default: a stub OpenRouter server, no key and no cost.
 
-    Two offline suites run: test_pipeline.py (import pipeline) and
+    The offline suites run: test_pipeline.py (import pipeline),
     test_browser.py (browser lifetime + concurrency, Playwright stubbed, so it
-    needs nothing installed).
+    needs nothing installed), test_sessions.py (who may drive a playlist
+    session), test_session_sync.py (what the server tells a follower when
+    updates are late, reordered or missed) and session-sync.sim.js (the
+    follower's logic on a fake network, under node).
+
+    `--e2e` additionally runs test_session_e2e.py: a session leader and
+    follower in two headless browsers, the follower's connection cut.
 
     `--live` additionally runs the real-API suite, which reads the key from
     .secrets / $OPENROUTER_API_KEY / ~/.chords/secrets.json and skips if there
@@ -292,12 +301,22 @@ def server_test(ctx, args):
     """
     tests = ctx.cfg.server.dir / "tests"
     if not args.live_only:
-        # Two offline suites: the import pipeline against a stub OpenRouter, and
-        # the browser lifetime/concurrency logic with Playwright stubbed out.
-        for suite in ("test_pipeline.py", "test_browser.py"):
-            rc = ctx.run([sys.executable, str(tests / suite)], cwd=tests)
+        # The offline suites: the import pipeline against a stub OpenRouter,
+        # the browser lifetime/concurrency logic with Playwright stubbed out,
+        # playlist-session control and sync, and the follower's half of the
+        # sync simulated in node.
+        suites = [[sys.executable, str(tests / suite)] for suite in
+                  ("test_pipeline.py", "test_browser.py", "test_sessions.py",
+                   "test_session_sync.py")]
+        suites.append(["node", str(tests / "session-sync.sim.js")])
+        for cmd in suites:
+            rc = ctx.run(cmd, cwd=tests)
             if rc != 0:
                 return rc
+    if args.e2e:
+        rc = ctx.run([sys.executable, str(tests / "test_session_e2e.py")], cwd=tests)
+        if rc != 0:
+            return rc
     if args.live or args.live_only:
         cmd = [sys.executable, str(tests / "test_live.py")]
         if args.only:

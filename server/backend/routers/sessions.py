@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from .. import session_state
 from ..auth import get_client_id, get_current_user
-from ..database import get_db
+from ..database import SessionLocal, get_db
 from ..events import publish
 from ..models import Playlist, PlaylistCollaborator, User
 from ..schemas import (
@@ -38,17 +38,41 @@ def _require_client_id(client_id: Optional[str]) -> str:
 
 
 def _out(session: dict) -> SessionOut:
-    return SessionOut.model_validate(session)
+    out = SessionOut.model_validate(session)
+    if out.now is not None:
+        out.now.age = session_state.age(session)
+    return out
+
+
+# A stale write is 412, not 409: 409 tells the controller it lost control and
+# should re-fetch, while a stale one is simply dropped — and older clients, which
+# act on 409 and 404 only, ignore it too.
+_STATUS = {"conflict": 409, "missing": 404, "stale": 412}
 
 
 def _fail(err: session_state.SessionError) -> HTTPException:
-    return HTTPException(409 if err.kind == "conflict" else 404, str(err))
+    return HTTPException(_STATUS.get(err.kind, 409), str(err))
 
 
 def _announce(pl: Playlist, origin: Optional[str]) -> None:
     """A signal, not a payload: everyone re-fetches the session. The house style
     (`events.py`), and it keeps one serialization path for the snapshot."""
     publish(_collaborator_ids(pl), {"type": "session", "id": pl.id, "origin": origin})
+
+
+def _announce_expired(playlist_id: str) -> None:
+    """A session that ran out its TTL ends like any other: everyone re-fetches,
+    gets 404, and leaves. Without this, followers kept showing the song."""
+    db = SessionLocal()
+    try:
+        pl = db.get(Playlist, playlist_id)
+        if pl is not None:
+            _announce(pl, None)
+    finally:
+        db.close()
+
+
+session_state.on_expiry(_announce_expired)
 
 
 # ---------------------------------------------------------------------------
@@ -167,6 +191,7 @@ def set_now(
             line=body.line,
             speed=body.speed,
             playing=body.playing,
+            seq=body.seq,
         )
     except session_state.SessionError as err:
         raise _fail(err) from err
@@ -182,26 +207,36 @@ def tick(
     current_user: User = Depends(get_current_user),
     origin: Optional[str] = Depends(get_client_id),
 ):
-    """The ~10 s drift beacon, sent only while playing.
+    """The controller's position: the ~10 s drift beacon while playing, a hand
+    scroll while paused, a change of speed.
 
     This is the one event that carries its payload inline instead of being a
     signal to re-fetch: making every follower pull a whole song body to learn one
     line number, six times a minute, is not worth the consistency it buys. The
-    exception is noted in `events.py`'s docstring.
+    exception is noted in `events.py`'s docstring. It carries the whole position
+    — song, version, speed, line, playing — so a follower can tell whether it
+    applies to what it holds, or whether it missed something and must re-fetch.
     """
     pl = _get_accessible_playlist(playlist_id, current_user, db)
     client_id = _require_client_id(origin)
     try:
         session = session_state.tick(
             pl.id, client_id=client_id, line=body.line, playing=body.playing,
+            song_id=body.song_id, speed=body.speed, seq=body.seq,
         )
+        now = session["now"]
+        event = {
+            "type": "session-tick",
+            "id": pl.id,
+            "songId": (now["song"] or {}).get("id"),
+            "version": session["version"],
+            "speed": now["speed"],
+            "line": now["line"],
+            "playing": now["playing"],
+            "age": 0,
+            "origin": origin,
+        }
     except session_state.SessionError as err:
         raise _fail(err) from err
-    publish(_collaborator_ids(pl), {
-        "type": "session-tick",
-        "id": pl.id,
-        "line": body.line,
-        "playing": body.playing,
-        "origin": origin,
-    })
+    publish(_collaborator_ids(pl), event)
     return _out(session)

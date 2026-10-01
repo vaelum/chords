@@ -8,6 +8,34 @@ Each released version below has a `## [x.y.z]` heading. The release workflow
 extracts the section matching the pushed tag (`vx.y.z`) and uses it as the
 release body, on Forgejo and then on GitHub — so keep these sections accurate
 before tagging.
+## [2026.10.1]
+
+### Fixed
+
+- **A follower comes back to the right place after losing the connection.**
+  If a follower's connection dropped while the leader changed song, the
+  follower could stay on the old song after reconnecting. This happened when
+  the server was being redeployed, or when the stream simply closed, rather
+  than when the network itself went away. Now every reconnect asks the server
+  where the session is.
+
+- **Followers keep the leader's pace.** A change of scroll speed on the leader
+  never reached followers, so they fell behind a leader who sped up and kept
+  jumping back to a leader who slowed down. A tempo or title change on the
+  leader now reaches followers too.
+
+- **No more jumps to the wrong place on a song change.** The leader's last
+  position report for the old song could arrive after the new song had opened
+  and move followers to that line. The server now refuses it.
+
+- **Joining mid-song starts where the leader is,** not up to ten seconds
+  behind, and a phone whose screen was off catches up at once when it comes
+  back instead of crawling forward.
+
+- **A session that times out ends for its followers too.** After 15 minutes
+  without the leader doing anything, followers now see "Session ended" instead
+  of the last song staying up.
+
 ## [2026.9.7]
 
 ### Changed
