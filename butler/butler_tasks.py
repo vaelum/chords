@@ -289,8 +289,11 @@ def server_test(ctx, args):
     test_browser.py (browser lifetime + concurrency, Playwright stubbed, so it
     needs nothing installed), test_sessions.py (who may drive a playlist
     session), test_session_sync.py (what the server tells a follower when
-    updates are late, reordered or missed) and session-sync.sim.js (the
-    follower's logic on a fake network, under node).
+    updates are late, reordered or missed), test_import_urls.py (which URLs
+    the import hands to the browser), test_fetcher.py (the backend's calls to
+    the fetcher container), test_egress.py (where the browser may connect; its
+    last part drives a real Chromium) and session-sync.sim.js (the follower's
+    logic on a fake network, under node).
 
     `--e2e` additionally runs test_session_e2e.py: a session leader and
     follower in two headless browsers, the follower's connection cut.
@@ -303,11 +306,13 @@ def server_test(ctx, args):
     if not args.live_only:
         # The offline suites: the import pipeline against a stub OpenRouter,
         # the browser lifetime/concurrency logic with Playwright stubbed out,
-        # playlist-session control and sync, and the follower's half of the
-        # sync simulated in node.
+        # playlist-session control and sync, which URLs the import may fetch,
+        # the calls to the fetcher, where its browser may connect, and the
+        # follower's half of the sync simulated in node.
         suites = [[sys.executable, str(tests / suite)] for suite in
                   ("test_pipeline.py", "test_browser.py", "test_sessions.py",
-                   "test_session_sync.py")]
+                   "test_session_sync.py", "test_import_urls.py", "test_fetcher.py",
+                   "test_egress.py")]
         suites.append(["node", str(tests / "session-sync.sim.js")])
         for cmd in suites:
             rc = ctx.run(cmd, cwd=tests)

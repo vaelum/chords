@@ -25,7 +25,7 @@ import re
 from typing import Any, AsyncIterator
 
 from .llm import LLMError, stream_completion
-from .web_fetch import busy as browser_busy, fetch_rendered_full
+from .fetching import browser_busy, fetch_rendered_full
 
 logger = logging.getLogger("chords.import")
 
@@ -420,7 +420,7 @@ async def stream_auto_import(url: str) -> AsyncIterator[dict]:
     """
     yield {"type": "progress", "message": "Opening headless browser…"}
     try:
-        if browser_busy():
+        if await browser_busy():
             yield {"type": "progress", "message": "Waiting for a free browser slot…"}
         yield {"type": "progress", "message": f"Loading {url}"}
         cap = await asyncio.wait_for(fetch_rendered_full(url), timeout=_FETCH_TIMEOUT)
@@ -514,7 +514,7 @@ async def _emit_songs(evt: dict) -> AsyncIterator[dict]:
 async def stream_scan_playlist(url: str) -> AsyncIterator[dict]:
     yield {"type": "progress", "message": "Opening headless browser…"}
     try:
-        if browser_busy():
+        if await browser_busy():
             yield {"type": "progress", "message": "Waiting for a free browser slot…"}
         yield {"type": "progress", "message": f"Loading {url}"}
         cap = await asyncio.wait_for(fetch_rendered_full(url), timeout=_FETCH_TIMEOUT)
@@ -646,7 +646,7 @@ async def stream_auto_text(
 async def stream_extract(url: str) -> AsyncIterator[dict]:
     yield {"type": "progress", "message": "Opening headless browser…"}
     try:
-        if browser_busy():
+        if await browser_busy():
             yield {"type": "progress", "message": "Waiting for a free browser slot…"}
         yield {"type": "progress", "message": f"Loading {url}"}
         cap = await asyncio.wait_for(fetch_rendered_full(url), timeout=_FETCH_TIMEOUT)

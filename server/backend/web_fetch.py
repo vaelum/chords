@@ -26,7 +26,12 @@ from typing import Optional
 
 from playwright.async_api import BrowserContext, async_playwright
 
-from .database import DATA_DIR
+from . import egress_proxy
+
+# Read here rather than imported from .database: the fetcher (fetcher.py) runs
+# this module with no data directory and no database layer. It only places the
+# default profile directory, beside where the data directory would be.
+DATA_DIR = os.environ.get("CHORDS_DATA_DIR", "/chords-data")
 
 logger = logging.getLogger("chords.browser")
 
@@ -75,6 +80,9 @@ _LAUNCH_ARGS = [
     "--disable-dev-shm-usage",
     # Hide the most obvious "I'm automated" tell.
     "--disable-blink-features=AutomationControlled",
+    # WebRTC sends UDP straight to the addresses a page names, around the
+    # egress proxy; keep it to what goes through the proxy, which is nothing.
+    "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
 ]
 
 # Markers that indicate a bot / "are you human" interstitial rather than the
@@ -124,6 +132,12 @@ async def _launch_context() -> BrowserContext:
         locale="en-US",
         timezone_id="America/New_York",
         extra_http_headers={"Accept-Language": "en-US,en;q=0.9"},
+        # Every connection the browser makes goes through egress_proxy, which
+        # refuses private and local destinations. "<-loopback>" removes
+        # Chromium's built-in exemption for localhost, which would otherwise
+        # skip the proxy for exactly the addresses it exists to refuse.
+        proxy={"server": f"http://127.0.0.1:{await egress_proxy.ensure_started()}",
+               "bypass": "<-loopback>"},
     )
 
     last_err = None
@@ -236,15 +250,6 @@ async def _page_slot():
                 logger.debug("page close failed", exc_info=True)
 
 
-async def _goto(page, url: str, timeout_ms: int) -> None:
-    """Navigate and let JS settle. Raises on navigation failure."""
-    await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-    try:
-        await page.wait_for_load_state("networkidle", timeout=6000)
-    except Exception:
-        pass
-
-
 async def _read_text(page) -> str:
     try:
         return await page.evaluate("document.body ? document.body.innerText : ''") or ""
@@ -277,24 +282,6 @@ async def _await_challenge_clear(page, attempts: int = 4, every_ms: int = 3000) 
     return text
 
 
-async def fetch_rendered(url: str, timeout_ms: int = 30000) -> str:
-    """Open `url` in a headless browser, return body.innerText after JS settles."""
-    async with _page_slot() as page:
-        await _goto(page, url, timeout_ms)
-        return await _await_challenge_clear(page)
-
-
-async def fetch_screenshot(url: str, timeout_ms: int = 30000) -> bytes:
-    """Open `url` and return a PNG screenshot. Best-effort — captures whatever
-    the browser rendered even if the page threw errors or loaded only partially."""
-    async with _page_slot() as page:
-        try:
-            await _goto(page, url, timeout_ms)
-        except Exception:
-            pass  # capture whatever state the browser is in
-        return await page.screenshot(full_page=False, type="png")
-
-
 _LINKS_JS = """
     Array.from(document.querySelectorAll('a[href]')).map(a => ({
         href: a.href,
@@ -311,7 +298,7 @@ _LINKS_JS = """
 async def fetch_rendered_full(url: str, timeout_ms: int = 30000) -> dict:
     """Open `url` and capture everything the browser saw — best effort.
 
-    Unlike `fetch_rendered`, this never raises on a navigation error: it returns
+    It never raises on a navigation error: it returns
     whatever the page rendered (even a partial / error / challenge page) so
     callers can show and offer it for download when an import fails. Returns a
     dict with keys: {text, html, title, url, links, loaded, challenge}.
@@ -355,15 +342,3 @@ async def fetch_rendered_full(url: str, timeout_ms: int = 30000) -> dict:
             "loaded": loaded,
             "challenge": looks_like_bot_challenge(text=text, title=title, html=html),
         }
-
-
-async def fetch_rendered_with_links(url: str, timeout_ms: int = 30000) -> tuple[str, list[dict]]:
-    """Open `url`, return (body.innerText, [{href, text}, …]) after JS settles."""
-    async with _page_slot() as page:
-        await _goto(page, url, timeout_ms)
-        text = await _await_challenge_clear(page)
-        try:
-            links = await page.evaluate(_LINKS_JS)
-        except Exception:
-            links = []
-        return text, links or []

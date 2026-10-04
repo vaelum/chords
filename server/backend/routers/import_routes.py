@@ -4,7 +4,7 @@ import time
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 
@@ -14,8 +14,8 @@ from ..agent import (
     stream_search, stream_extract, stream_scan_playlist, stream_auto_import,
     stream_extract_text, stream_extract_image, stream_scan_text, stream_auto_text,
 )
-from ..web_fetch import fetch_screenshot
 from ..auth import get_current_user
+from ..url_policy import require_http_url
 from ..models import User
 
 router = APIRouter(prefix="/import", tags=["import"])
@@ -57,8 +57,15 @@ class AutoImportRequest(_Base):
     url: str
 
 
-class ScreenshotRequest(_Base):
-    url: str
+def _fetchable(url: str) -> str:
+    """The submitted URL, if the browser may open it; a 400 otherwise.
+
+    A plain-string detail, not a 422 from the request model: the clients show
+    `detail` as the error message, and a validation error's is a list."""
+    try:
+        return require_http_url(url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Can't import that URL: {e}.")
 
 
 def _ndjson(stream, label: str = "import"):
@@ -104,7 +111,7 @@ async def search(body: SearchRequest, _: User = Depends(get_current_user)):
 
 @router.post("/extract")
 async def extract(body: ExtractRequest, _: User = Depends(get_current_user)):
-    return _ndjson(stream_extract(body.url), "extract")
+    return _ndjson(stream_extract(_fetchable(body.url)), "extract")
 
 
 @router.post("/extract-text")
@@ -119,7 +126,7 @@ async def extract_image(body: ExtractImageRequest, _: User = Depends(get_current
 
 @router.post("/playlist-scan")
 async def playlist_scan(body: PlaylistScanRequest, _: User = Depends(get_current_user)):
-    return _ndjson(stream_scan_playlist(body.url), "playlist-scan")
+    return _ndjson(stream_scan_playlist(_fetchable(body.url)), "playlist-scan")
 
 
 @router.post("/scan-text")
@@ -136,17 +143,5 @@ async def auto_text(body: ScanTextRequest, _: User = Depends(get_current_user)):
 
 @router.post("/auto")
 async def auto_import(body: AutoImportRequest, _: User = Depends(get_current_user)):
-    return _ndjson(stream_auto_import(body.url), "auto")
+    return _ndjson(stream_auto_import(_fetchable(body.url)), "auto")
 
-
-@router.post("/screenshot")
-async def screenshot(body: ScreenshotRequest, _: User = Depends(get_current_user)):
-    try:
-        png = await fetch_screenshot(body.url)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    return Response(
-        content=png,
-        media_type="image/png",
-        headers={"Content-Disposition": 'attachment; filename="chords-debug.png"'},
-    )

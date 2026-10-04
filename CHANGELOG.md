@@ -8,6 +8,39 @@ Each released version below has a `## [x.y.z]` heading. The release workflow
 extracts the section matching the pushed tag (`vx.y.z`) and uses it as the
 release body, on Forgejo and then on GitHub — so keep these sections accurate
 before tagging.
+## [2026.10.2]
+
+Only the server changes in this release. The desktop and Android apps and the
+browser extension are the same as in 2026.10.1 apart from their version
+number, so there is nothing to update on your devices.
+
+### Security
+
+- **Importing from a link only ever opens public web pages.** To import from
+  a link, the server opens it in a browser and reads what it finds. It did not
+  check where the link led, so a signed-in account could point it at the
+  server's own files or at other machines on its network. Now only `http` and
+  `https` links are accepted, and the browser can reach public internet
+  addresses only, including when a page redirects or loads something from
+  elsewhere. The browser also runs in a container of its own, which holds none
+  of the server's data.
+
+### Removed
+
+- **The debugging route `/api/import/screenshot`.** Nothing in the apps or the
+  extension used it.
+
+### Changed
+
+- **If you run your own server: it is two containers now.** `chords` is the
+  app, and `chords-fetcher` is the browser the import uses. The compose file
+  starts both, and the browser profile volume moves to the fetcher. Set
+  `CHORDS_FETCH_DENY` in `server/docker/docker-compose.yml` to your own
+  domain, so the import cannot reach your server's own ports through its
+  public address. Both containers log to journald now, so the log outlives a
+  redeploy. On a host without systemd's journal (Docker Desktop, for one),
+  remove the two `logging:` sections first, or the containers will not start.
+
 ## [2026.10.1]
 
 ### Fixed

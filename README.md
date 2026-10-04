@@ -59,7 +59,13 @@ playlists).
 **Import pipeline** (`agent.py`, `web_fetch.py`, `llm.py`) runs on
 [OpenRouter](https://openrouter.ai): Playwright renders the target page
 server-side, then a model parses the rendered text (or a pasted chart / uploaded
-image) into the chords format. A web-search step finds candidate sources from a
+image) into the chords format. Only `http(s)` URLs are fetched
+(`url_policy.py`). Under Docker the browser runs in a container of its own,
+`chords-fetcher` (`fetcher.py`, called through `fetching.py`), with no data
+mount and off the `edge` network; without Docker it runs in-process. Either
+way every connection the browser makes goes through `egress_proxy.py`, which
+refuses loopback, private, link-local and the server's own addresses, redirect
+hops and the page's own requests included. A web-search step finds candidate sources from a
 free-text query. Results stream to the client as NDJSON `progress` / `result` /
 `error` events.
 

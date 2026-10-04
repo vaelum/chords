@@ -4,6 +4,7 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+      target: app
       args:
         # Fast Debian mirror for the image build; empty = default Debian CDN.
         # `butler.py server deploy` forwards $APT_MIRROR from your shell
@@ -11,19 +12,50 @@ services:
         APT_MIRROR: ${APT_MIRROR:-}
     volumes:
       - ${HOME}/.chords:/chords-data
-      # The Playwright profile lives OUTSIDE the data directory on purpose: the
-      # deploy backup zips all of /chords-data, and this is a disposable
-      # Chromium cache that was making every backup ~4x bigger (11MB -> 47MB).
-      # A named volume so it still survives redeploys and keeps anti-bot
-      # clearance cookies; losing it only costs a slower first import.
-      - chords_browser_profile:/chords-browser-profile
     environment:
       CHORDS_DATA_DIR: /chords-data
       # AI import key. Normally left empty here and read from
       # /chords-data/secrets.json instead (set it with
       # `python butler.py server key`); this passthrough is for one-off overrides.
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      CHORDS_BROWSER_PROFILE_DIR: /chords-browser-profile
+      # Every page the import opens is opened by the fetcher, below.
+      CHORDS_FETCHER_URL: http://chords-fetcher:8001
+    networks:
+      - edge
+      - fetch
+    depends_on:
+      - fetcher
+    # A guardrail, not a tuning knob. Until the browser moved out this one
+    # container had 1500m; the two now share that.
+    mem_limit: 512m
+    restart: unless-stopped
+    # Every deploy recreates the container, and the default json-file log went
+    # with it. journald keeps it across recreations (the host caps the journal
+    # at 500 MB): `journalctl CONTAINER_NAME=chords`.
+    logging:
+      driver: journald
+
+  # The headless browser the import opens pages in (backend/fetcher.py). Any
+  # signed-in account chooses what it opens, so it holds nothing worth taking:
+  # no data mount, so secrets.json is not in its filesystem, and only the
+  # `fetch` network, so Forgejo, the reverse proxy and the rest of `edge` are
+  # out of its reach. chords calls it on `fetch`; it publishes no port.
+  fetcher:
+    container_name: chords-fetcher
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: fetcher
+      args:
+        APT_MIRROR: ${APT_MIRROR:-}
+    volumes:
+      # The Playwright profile, outside chords' data on purpose: the deploy
+      # backup zips all of it, and this is a disposable Chromium cache that was
+      # making every backup ~4x bigger (11MB -> 47MB). A named volume so it
+      # still survives redeploys and keeps anti-bot clearance cookies; losing
+      # it only costs a slower first import.
+      - chords_browser_profile:/chords-browser-profile
+    environment:
       # Empty on purpose. The default is "chrome", but this image installs only
       # the bundled Chromium (see the Dockerfile), so that default is a
       # guaranteed failed launch attempt on every cold start and the
@@ -35,12 +67,17 @@ services:
       # starve them. Raise MAX_PAGES if imports feel queued too often.
       CHORDS_BROWSER_IDLE_TIMEOUT: "600"
       CHORDS_BROWSER_MAX_PAGES: "2"
+      # The egress proxy (backend/egress_proxy.py) refuses every non-public
+      # address; these are public ones it refuses too: the server's own, where
+      # the host's ports are. Names are resolved when the fetcher starts.
+      CHORDS_FETCH_DENY: "chordsfor.me"
     networks:
-      - edge
-    # A guardrail, not a tuning knob: it caps the blast radius of a runaway
-    # import so it cannot take the rest of the box down with it.
-    mem_limit: 1500m
+      - fetch
+    # Caps the blast radius of a runaway page so it cannot take the box down.
+    mem_limit: 1g
     restart: unless-stopped
+    logging:
+      driver: journald
 
 volumes:
   chords_browser_profile:
@@ -66,3 +103,6 @@ volumes:
 networks:
   edge:
     external: true
+  # The fetcher's own network: outbound internet through the host's NAT, and
+  # chords as its only neighbour. Owned by this stack, unlike `edge`.
+  fetch:
